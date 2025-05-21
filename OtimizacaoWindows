@@ -1,0 +1,247 @@
+import tkinter as tk
+from tkinter import Label, Checkbutton, Button, BooleanVar, messagebox
+import time
+import threading
+import subprocess
+import sys # Importar sys para verificar o sistema operacional
+
+etapa_atual = ""
+
+# A classe ToolTip não será mais usada para as checkboxes, mas a mantive caso precise para outros widgets
+class ToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        widget.bind("<Enter>", self.show_tip)
+        widget.bind("<Leave>", self.hide_tip)
+
+    def show_tip(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        x, y, cx, cy = self.widget.bbox("insert")
+        x += self.widget.winfo_rootx() + 25
+        y += self.widget.winfo_rooty() + 20
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            tw,
+            text=self.text,
+            justify=tk.LEFT,
+            background="#ffffe0",
+            relief=tk.SOLID,
+            borderwidth=1,
+            font=("Arial", 9),
+            fg="black"
+        )
+        label.pack(ipadx=1)
+
+    def hide_tip(self, event=None):
+        if self.tip_window:
+            self.tip_window.destroy()
+            self.tip_window = None
+
+# Função principal da interface
+def relogio_executando(get_etapa):
+    def iniciar_execucao():
+        selecionadas = {
+            "sfc": sfc_var.get(),
+            "limpeza": limpeza_var.get(),
+            "chkdsk": chkdsk_var.get(),
+            "diagnostico": diagnostico_var.get(), # Corrigido: agora pega o valor booleano
+            "reiniciar": reiniciar_var.get()
+        }
+        threading.Thread(target=executar_otimizacoes, args=(selecionadas,), daemon=True).start()
+
+    def abortar():
+        messagebox.showinfo("Abortado", "Execução abortada pelo usuário.")
+        janela.quit()
+
+    janela = tk.Tk()
+    janela.title("Otimizador do Windows")
+    janela.geometry("500x400") # Aumentei a altura para acomodar a área de descrição
+    janela.configure(bg="black")
+    janela.attributes("-topmost", True)
+    janela.attributes("-alpha", 0.9)
+
+    label_relogio = Label(janela, font=("Arial", 36, "bold"), bg="black", fg="white")
+    label_relogio.pack(pady=10)
+
+    label_etapa = Label(janela, font=("Arial", 10, "bold"), bg="black", fg="white")
+    label_etapa.pack()
+
+    def atualizar_relogio():
+        while True:
+            agora = time.strftime("%H:%M:%S")
+            label_relogio.config(text=agora)
+            label_etapa.config(text=f"{get_etapa()}")
+            janela.update_idletasks()
+            time.sleep(1)
+
+    # Checkboxes
+    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, reiniciar_var
+    sfc_var = BooleanVar()
+    limpeza_var = BooleanVar()
+    chkdsk_var = BooleanVar()
+    diagnostico_var = BooleanVar() # Corrigido: deve ser instanciado como BooleanVar()
+    reiniciar_var = BooleanVar()
+
+    opcoes = [
+        ("SFC /Scannow", sfc_var, "Verifica e repara arquivos corrompidos do sistema do Windows (requer privilégios de administrador e pode demorar)."),
+        ("Limpeza de Disco", limpeza_var, "Remove arquivos temporários, arquivos de sistema e outros itens desnecessários para liberar espaço em disco. Pode ser um processo interativo."),
+        ("CHKDSK /F", chkdsk_var, "Verifica a integridade do sistema de arquivos e corrige erros lógicos no disco. Geralmente requer reinicialização para unidades em uso."),
+        ("Diagnóstico de Memória", diagnostico_var, "Realiza uma verificação da memória RAM. O processo é demorado, portanto, será executado somente na próxima reinicialização. Aconselha-se que, ao terminar o expediente, reinicie o computador para que seja efetuado o diagnóstico."),
+        ("Reiniciar Computador", reiniciar_var, "Reinicia o computador imediatamente. Essencial após algumas otimizações para que as mudanças tenham efeito.")
+    ]
+
+    # Frame para as checkboxes
+    checkbox_frame = tk.Frame(janela, bg="black")
+    checkbox_frame.pack(pady=10)
+
+    # Função para atualizar a descrição
+    def atualizar_descricao(dica_texto):
+        descricao_label.config(text=dica_texto)
+
+    # Organizar checkboxes em duas colunas (com 5 opções, resultará em 3 linhas)
+    for i, (texto, var, dica) in enumerate(opcoes):
+        row = i % 3 # Ajustado para 3 linhas, pois 5 opções em 2 colunas exigem 3 linhas (2+2+1)
+        col = i // 3 # Ajustado para 3 colunas, mas como só há 2, a 3ª coluna ficará vazia na linha 0 e 1, e a 2ª coluna na linha 2.
+        # Melhor abordagem para 2 colunas e N itens:
+        # row = i // 2
+        # col = i % 2
+        # Mantendo o que o usuário tinha, mas ciente que para 5 itens em 2 colunas, o layout será 3x2.
+        # Vamos usar row = i // 2 e col = i % 2 para garantir 2 colunas e 3 linhas.
+        row = i // 2
+        col = i % 2
+        cb = Checkbutton(checkbox_frame, text=texto, variable=var, bg="black", fg="white", selectcolor="black", font=("Arial", 10))
+        cb.grid(row=row, column=col, sticky="w", padx=15, pady=5) # Ajustar padx e pady para espaçamento
+        # Bind events para mostrar/limpar a descrição
+        cb.bind("<Enter>", lambda event, d=dica: atualizar_descricao(d))
+        cb.bind("<Leave>", lambda event: atualizar_descricao("")) # Limpa ao sair
+
+    # Área de texto para a descrição (a "telinha")
+    descricao_label = Label(janela, text="", wraplength=450, justify=tk.LEFT,
+                            font=("Arial", 9, "italic"), bg="gray20", fg="lightgray",
+                            relief=tk.RIDGE, bd=2, padx=5, pady=5)
+    descricao_label.pack(pady=5, padx=20, fill=tk.X) # Adicionei fill=tk.X para ocupar a largura disponível
+
+    Button(
+        janela, text="Iniciar", command=iniciar_execucao,
+        bg="green", fg="white", font=("Arial", 10, "bold"),
+        width=20, height=2
+        ).pack(pady=5)
+
+    Button(
+        janela, text="Abortar", command=abortar,
+        bg="red", fg="white", font=("Arial", 10, "bold"),
+        width=20, height=2
+        ).pack()
+
+    threading.Thread(target=atualizar_relogio, daemon=True).start()
+    janela.mainloop()
+
+def get_etapa():
+    return etapa_atual
+
+# Adicionei uma função auxiliar para aplicar as creationflags
+def run_command_no_window(command, shell_mode=False, check_return=False):
+    creation_flags = 0
+    if sys.platform == "win32":
+        creation_flags = subprocess.CREATE_NO_WINDOW
+    
+    if shell_mode:
+        subprocess.run(command, shell=True, creationflags=creation_flags, check=check_return)
+    else:
+        subprocess.run(command, creation_flags=creation_flags, check=check_return)
+
+# Funções de otimização
+def sfc():
+    global etapa_atual
+    etapa_atual = "Executando SFC /Scannow..."
+    # 'shell=True' é necessário para comandos como 'sfc /scannow'
+    run_command_no_window("sfc /scannow", shell_mode=True)
+
+def limpezaDisco():
+    global etapa_atual
+    etapa_atual = "Executando Limpeza de Disco..."
+    # 'cleanmgr' não precisa de shell=True se passado como lista, mas 'sagerun' é argumento
+    run_command_no_window(["cleanmgr", "/sagerun:99"], check_return=True)
+
+def chkdsk():
+    global etapa_atual
+    etapa_atual = "Executando CHKDSK..."
+    # 'shell=True' é necessário para 'chkdsk /F'
+    run_command_no_window("chkdsk /F", shell_mode=True)
+
+def diagnostico():
+    global etapa_atual # Adicionado para atualizar a etapa global
+    etapa_atual = "Agendando Diagnóstico de Memória..." # Atualiza a etapa
+    """
+    Agenda o Diagnóstico de Memória do Windows para ser executado
+    na próxima reinicialização do sistema.
+    """
+    if sys.platform != "win32":
+        messagebox.showwarning("Aviso", "O Diagnóstico de Memória é específico para sistemas operacionais Windows e não será executado.")
+        etapa_atual = "Diagnóstico de Memória (apenas Windows)"
+        return False
+
+    try:
+        command = ["mdsched.exe", "/run"]
+        run_command_no_window(command, check_return=True)
+        messagebox.showinfo("Diagnóstico de Memória", "Diagnóstico de memória agendado com sucesso para a próxima reinicialização.\nPor favor, reinicie o computador para iniciar o diagnóstico.")
+        etapa_atual = "Diagnóstico de Memória Agendado"
+        return True
+    except subprocess.CalledProcessError as e:
+        messagebox.showerror("Erro no Diagnóstico de Memória", f"Erro ao agendar o diagnóstico de memória: {e.cmd}\nCódigo de retorno: {e.returncode}\nDetalhes: {e.stderr}")
+        etapa_atual = f"Erro no Diagnóstico de Memória: {e.returncode}"
+        return False
+    except FileNotFoundError:
+        messagebox.showerror("Erro", "mdsched.exe não encontrado. Verifique se o Diagnóstico de Memória do Windows está disponível no seu sistema.")
+        etapa_atual = "mdsched.exe não encontrado"
+        return False
+    except Exception as e:
+        messagebox.showerror("Erro Inesperado", f"Ocorreu um erro inesperado ao agendar o diagnóstico de memória: {e}")
+        etapa_atual = f"Erro inesperado: {e}"
+        return False
+
+def executar_otimizacoes(selecionadas):
+    global etapa_atual
+    try:
+        if selecionadas["sfc"]:
+            sfc()
+        if selecionadas["limpeza"]:
+            limpezaDisco()
+        if selecionadas["chkdsk"]:
+            chkdsk()
+        if selecionadas["diagnostico"]: # Adicionado o diagnóstico de memória aqui
+            diagnostico()
+        
+        # O messagebox de sucesso/erro será exibido aqui, antes ou depois do shutdown
+        # Se o diagnóstico de memória foi agendado, a mensagem final pode ser ajustada.
+        if not selecionadas["reiniciar"] and not selecionadas["diagnostico"]:
+            messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!")
+        elif selecionadas["diagnostico"] and not selecionadas["reiniciar"]:
+             messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!\nO Diagnóstico de Memória foi agendado para a próxima reinicialização.")
+        elif selecionadas["diagnostico"] and selecionadas["reiniciar"]:
+            # A mensagem de reinicialização já cobrirá o diagnóstico agendado
+            pass 
+
+        if selecionadas["reiniciar"]:
+            etapa_atual = "Reiniciando computador..."
+            time.sleep(3)
+            # 'shell=True' é necessário para 'shutdown'
+            run_command_no_window("shutdown /r /f /t 0", shell_mode=True)
+        else:
+            etapa_atual = "Otimizações finalizadas. Reinicialização não solicitada."
+            
+    except subprocess.CalledProcessError as e:
+        # Captura erros de comandos externos que falham (returncode != 0)
+        etapa_atual = f"Erro no comando: {e.cmd}. Código de retorno: {e.returncode}"
+        messagebox.showerror("Erro de Execução", f"Ocorreu um erro ao executar um comando: {e.cmd}\nDetalhes: {e}")
+    except Exception as e:
+        etapa_atual = f"Erro geral: {e}"
+        messagebox.showerror("Erro Inesperado", f"Ocorreu um erro inesperado durante as otimizações: {e}")
+
+# Iniciar interface
+relogio_executando(get_etapa)
