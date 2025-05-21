@@ -49,6 +49,7 @@ def relogio_executando(get_etapa):
             "limpeza": limpeza_var.get(),
             "chkdsk": chkdsk_var.get(),
             "diagnostico": diagnostico_var.get(),
+            "desfragmentacao": desfrag_var.get(),
             "reiniciar": reiniciar_var.get()
         }
         threading.Thread(target=executar_otimizacoes, args=(selecionadas,), daemon=True).start()
@@ -59,7 +60,7 @@ def relogio_executando(get_etapa):
 
     janela = tk.Tk()
     janela.title("Otimizador do Windows")
-    janela.geometry("500x400") # Aumentei a altura para acomodar a área de descrição
+    janela.geometry("500x450") # Aumentei a altura para acomodar a área de descrição
     janela.configure(bg="black")
     #janela.attributes("-topmost", True)
     janela.attributes("-alpha", 0.9)
@@ -79,11 +80,12 @@ def relogio_executando(get_etapa):
             time.sleep(1)
 
     # Checkboxes
-    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, reiniciar_var
+    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, desfrag_var, reiniciar_var
     sfc_var = BooleanVar()
     limpeza_var = BooleanVar()
     chkdsk_var = BooleanVar()
     diagnostico_var = BooleanVar()
+    desfrag_var = BooleanVar()
     reiniciar_var = BooleanVar()
 
     opcoes = [
@@ -91,6 +93,8 @@ def relogio_executando(get_etapa):
         ("Limpeza de Disco", limpeza_var, "Remove arquivos temporários, arquivos de sistema e outros itens desnecessários para liberar espaço em disco. Pode ser um processo interativo."),
         ("CHKDSK /F", chkdsk_var, "Verifica a integridade do sistema de arquivos e corrige erros lógicos no disco. Geralmente requer reinicialização para unidades em uso."),
         ("Diagnóstico de Memória", diagnostico_var, "Realiza uma verificação da memória RAM. O processo é demorado, portanto, será executado somente na próxima reinicialização. Aconselha-se que, ao terminar o expediente, reinicie o computador para que seja efetuado o diagnóstico."),
+        ("Desfragmentação de Disco", desfrag_var, """A desfragmentação não é recomendada caso utilize SSD, então por segurança, o sistema irá analisar os dispositivos de armazenamento em seu computador, e executará a desfragmentação apenas no HDD
+         Caso não seja encontrado HDD, a desfragmentação não será executada."""),
         ("Reiniciar Computador", reiniciar_var, "Reinicia o computador imediatamente. Essencial após algumas otimizações para que as mudanças tenham efeito.")
     ]
 
@@ -190,6 +194,78 @@ def diagnostico():
         etapa_atual = f"Erro inesperado: {e}"
         return False
 
+def desfragmentar():
+    global etapa_atual
+    etapa_atual = ("Iniciando a verificação de unidades de disco...")
+    found_hdd_to_defrag = False
+
+    try:
+        comando_ps_unidades = """
+        Get-Partition | 
+        Select-Object DriveLetter, @{Name='MediaType'; Expression={(Get-Disk -Partition $_).MediaType}} | 
+        Where-Object {$_.DriveLetter -ne $null} | 
+        Format-Table -HideTableHeaders
+        """
+        
+        resultado = subprocess.run(['powershell', '-Command', comando_ps_unidades],
+                                   capture_output=True, text=True, check=True, encoding='latin1')
+        
+        linhas = resultado.stdout.strip().split('\n')
+        
+        unidades_encontradas = []
+        for linha in linhas:
+            partes = linha.strip().split(maxsplit=1)
+            if len(partes) == 2:
+                letra = partes[0].strip()
+                media_type = partes[1].strip()
+                if letra and media_type:
+                    unidades_encontradas.append({'letra': letra + ':', 'media_type': media_type})
+
+        if not unidades_encontradas:
+            etapa_atual = ("Seu sistema não possui HDD. Não é recomendada a execução \ndesse procedimento em SSD, pois poderá \ncomprometer a vida útil do mesmo.")
+            return
+
+        etapa_atual = ("\nUnidades de disco encontradas:")
+        for unidade in unidades_encontradas:
+            etapa_atual = (f"- Unidade {unidade['letra']} (Tipo: {unidade['media_type']})")
+
+        etapa_atual = ("\nVerificando e desfragmentando HDDs...")
+        for unidade in unidades_encontradas:
+            letra_da_unidade = unidade['letra']
+            media_type = unidade['media_type']
+
+            if "HDD" in media_type:
+                found_hdd_to_defrag = True
+                etapa_atual = (f"\nDetectado HDD: {letra_da_unidade}. Iniciando desfragmentação...")
+                try:
+                    comando_desfrag = f"defrag {letra_da_unidade} /U /V"
+                    
+                    etapa_atual = (f"  Executando: {comando_desfrag}")
+                    subprocess.run(comando_desfrag, shell=True, check=True)
+                    etapa_atual = (f"Desfragmentação de {letra_da_unidade} concluída com sucesso.")
+                except subprocess.CalledProcessError as e:
+                    etapa_atual = (f"Erro ao desfragmentar {letra_da_unidade}: {e}")
+                    etapa_atual = (f"Stdout: {e.stdout}")
+                    etapa_atual = (f"Stderr: {e.stderr}")
+                except Exception as e:
+                    etapa_atual = (f"Ocorreu um erro durante a desfragmentação de {letra_da_unidade}: {e}")
+            elif "SSD" in media_type:
+                etapa_atual = (f"\nDetectado SSD: {letra_da_unidade}. Desfragmentação ignorada (não é recomendada para SSDs).")
+            else:
+                etapa_atual = (f"\nTipo de mídia desconhecido para {letra_da_unidade}: '{media_type}'. Desfragmentação ignorada.")
+
+    except subprocess.CalledProcessError as e:
+        etapa_atual = (f"Erro ao executar comando PowerShell para listar unidades: {e}")
+        etapa_atual = (f"Stdout: {e.stdout}")
+        etapa_atual = (f"Stderr: {e.stderr}")
+    except Exception as e:
+        etapa_atual = (f"Ocorreu um erro inesperado: {e}")
+
+    if not found_hdd_to_defrag:
+        etapa_atual = ("\nNenhum HDD foi encontrado para desfragmentação. Todas as unidades são SSDs ou de tipo desconhecido.")
+    else:
+        etapa_atual = ("\nProcesso de desfragmentação de HDDs concluído.")
+
 def executar_otimizacoes(selecionadas):
     global etapa_atual
     try:
@@ -201,6 +277,8 @@ def executar_otimizacoes(selecionadas):
             chkdsk()
         if selecionadas["diagnostico"]: 
             diagnostico()
+        if selecionadas["desfragmentacao"]: 
+            desfragmentar()
         if not selecionadas["reiniciar"] and not selecionadas["diagnostico"]:
             messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!")
         elif selecionadas["diagnostico"] and not selecionadas["reiniciar"]:
