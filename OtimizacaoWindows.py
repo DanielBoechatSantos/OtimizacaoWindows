@@ -1,0 +1,304 @@
+import tkinter as tk
+from tkinter import Label, Checkbutton, Button, BooleanVar, messagebox
+import time
+import threading
+import subprocess
+import sys
+
+etapa_atual = ""
+
+class ToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        widget.bind("<Enter>", self.show_tip)
+        widget.bind("<Leave>", self.hide_tip)
+
+    def show_tip(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        x, y, cx, cy = self.widget.bbox("insert")
+        x += self.widget.winfo_rootx() + 25
+        y += self.widget.winfo_rooty() + 20
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            tw,
+            text=self.text,
+            justify=tk.LEFT,
+            background="#ffffe0",
+            relief=tk.SOLID,
+            borderwidth=1,
+            font=("Arial", 9),
+            fg="black"
+        )
+        label.pack(ipadx=1)
+
+    def hide_tip(self, event=None):
+        if self.tip_window:
+            self.tip_window.destroy()
+            self.tip_window = None
+
+# Função principal da interface
+def relogio_executando(get_etapa):
+    def iniciar_execucao():
+        selecionadas = {
+            "sfc": sfc_var.get(),
+            "limpezaDisco": limpeza_var.get(),
+            "chkdsk": chkdsk_var.get(),
+            "diagnostico": diagnostico_var.get(),
+            "desfragmentacao": desfrag_var.get(),
+            "reiniciar": reiniciar_var.get()
+        }
+        threading.Thread(target=executar_otimizacoes, args=(selecionadas,), daemon=True).start()
+
+    def abortar():
+        messagebox.showinfo("Abortado", "Execução abortada pelo usuário.")
+        janela.quit()
+
+    janela = tk.Tk()
+    janela.title("Otimizador do Windows")
+    janela.geometry("500x450") # Aumentei a altura para acomodar a área de descrição
+    janela.configure(bg="black")
+    #janela.attributes("-topmost", True)
+    janela.attributes("-alpha", 0.9)
+
+    label_relogio = Label(janela, font=("Arial", 36, "bold"), bg="black", fg="white")
+    label_relogio.pack(pady=10)
+
+    label_etapa = Label(janela, font=("Arial", 10, "bold"), bg="black", fg="white")
+    label_etapa.pack()
+
+    def atualizar_relogio():
+        while True:
+            agora = time.strftime("%H:%M:%S")
+            label_relogio.config(text=agora)
+            label_etapa.config(text=f"{get_etapa()}")
+            janela.update_idletasks()
+            time.sleep(1)
+
+    # Checkboxes
+    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, desfrag_var, reiniciar_var
+    sfc_var = BooleanVar()
+    limpeza_var = BooleanVar()
+    chkdsk_var = BooleanVar()
+    diagnostico_var = BooleanVar()
+    desfrag_var = BooleanVar()
+    reiniciar_var = BooleanVar()
+
+    opcoes = [
+        ("SFC /Scannow", sfc_var, "Verifica e repara arquivos corrompidos do sistema do Windows (requer privilégios de administrador e pode demorar)."),
+        ("Limpeza de Disco", limpeza_var, "Remove arquivos temporários, arquivos de sistema e outros itens desnecessários para liberar espaço em disco. Pode ser um processo interativo."),
+        ("CHKDSK /F", chkdsk_var, "Verifica a integridade do sistema de arquivos e corrige erros lógicos no disco. Geralmente requer reinicialização para unidades em uso."),
+        ("Diagnóstico de Memória", diagnostico_var, "Realiza uma verificação da memória RAM. O processo é demorado, portanto, será executado somente na próxima reinicialização. Aconselha-se que, ao terminar o expediente, reinicie o computador para que seja efetuado o diagnóstico."),
+        ("Desfragmentação de Disco", desfrag_var, """A desfragmentação não é recomendada caso utilize SSD, então por segurança, o sistema irá analisar os dispositivos de armazenamento em seu computador, e executará a desfragmentação apenas no HDD
+         Caso não seja encontrado HDD, a desfragmentação não será executada."""),
+        ("Reiniciar Computador", reiniciar_var, "Reinicia o computador imediatamente. Essencial após algumas otimizações para que as mudanças tenham efeito.")
+    ]
+
+    checkbox_frame = tk.Frame(janela, bg="black")
+    checkbox_frame.pack(pady=10)
+
+    def atualizar_descricao(dica_texto):
+        descricao_label.config(text=dica_texto)
+
+    for i, (texto, var, dica) in enumerate(opcoes):
+        row = i % 3 
+        col = i // 3 
+        row = i // 2
+        col = i % 2
+        cb = Checkbutton(checkbox_frame, text=texto, variable=var, bg="black", fg="white", selectcolor="black", font=("Arial", 10))
+        cb.grid(row=row, column=col, sticky="w", padx=15, pady=5) 
+        cb.bind("<Enter>", lambda event, d=dica: atualizar_descricao(d))
+        cb.bind("<Leave>", lambda event: atualizar_descricao("")) 
+
+    # Área de texto para a descrição (a "telinha")
+    descricao_label = Label(janela, text="", wraplength=450, justify=tk.LEFT,
+                            font=("Arial", 9, "italic"), bg="gray20", fg="lightgray",
+                            relief=tk.RIDGE, bd=2, padx=5, pady=5)
+    descricao_label.pack(pady=5, padx=20, fill=tk.X) 
+
+    Button(
+        janela, text="Iniciar", command=iniciar_execucao,
+        bg="green", fg="white", font=("Arial", 10, "bold"),
+        width=20, height=2
+        ).pack(pady=5)
+
+    Button(
+        janela, text="Abortar", command=abortar,
+        bg="red", fg="white", font=("Arial", 10, "bold"),
+        width=20, height=2
+        ).pack()
+
+    threading.Thread(target=atualizar_relogio, daemon=True).start()
+    janela.mainloop()
+
+def get_etapa():
+    return etapa_atual
+
+def run_command_no_window(command, shell_mode=False, check_return=False):
+    creation_flags = 0
+    if sys.platform == "win32":
+        creation_flags = subprocess.CREATE_NO_WINDOW
+    
+    if shell_mode:
+        subprocess.run(command, shell=True, creationflags=creation_flags, check=check_return)
+    else:
+        subprocess.run(command, creation_flags=creation_flags, check=check_return)
+
+def sfc():
+    global etapa_atual
+    etapa_atual = "Executando SFC /Scannow..."
+    run_command_no_window("sfc /scannow", shell_mode=True)
+
+def limpezaDisco():
+    global etapa_atual
+    etapa_atual = "Executando Limpeza de Disco..."
+    subprocess.run(["cleanmgr", "/sagerun:99"], check=True)
+
+def chkdsk():
+    global etapa_atual
+    etapa_atual = "Executando CHKDSK..."
+    run_command_no_window("chkdsk /F", shell_mode=True)
+
+def diagnostico():
+    global etapa_atual
+    etapa_atual = "Agendando Diagnóstico de Memória..."
+    """
+    Agenda o Diagnóstico de Memória do Windows para ser executado
+    na próxima reinicialização do sistema.
+    """
+    if sys.platform != "win32":
+        messagebox.showwarning("Aviso", "O Diagnóstico de Memória é específico para sistemas operacionais Windows e não será executado.")
+        etapa_atual = "Diagnóstico de Memória (apenas Windows)"
+        return False
+
+    try:
+        command = ["mdsched.exe", "/run"]
+        run_command_no_window(command, check_return=True)
+        messagebox.showinfo("Diagnóstico de Memória", "Diagnóstico de memória agendado com sucesso para a próxima reinicialização.\nPor favor, reinicie o computador para iniciar o diagnóstico.")
+        etapa_atual = "Diagnóstico de Memória Agendado"
+        return True
+    except subprocess.CalledProcessError as e:
+        messagebox.showerror("Erro no Diagnóstico de Memória", f"Erro ao agendar o diagnóstico de memória: {e.cmd}\nCódigo de retorno: {e.returncode}\nDetalhes: {e.stderr}")
+        etapa_atual = f"Erro no Diagnóstico de Memória: {e.returncode}"
+        return False
+    except FileNotFoundError:
+        messagebox.showerror("Erro", "mdsched.exe não encontrado. Verifique se o Diagnóstico de Memória do Windows está disponível no seu sistema.")
+        etapa_atual = "mdsched.exe não encontrado"
+        return False
+    except Exception as e:
+        messagebox.showerror("Erro Inesperado", f"Ocorreu um erro inesperado ao agendar o diagnóstico de memória: {e}")
+        etapa_atual = f"Erro inesperado: {e}"
+        return False
+
+def desfragmentar():
+    global etapa_atual
+    etapa_atual = ("Iniciando a verificação de unidades de disco...")
+    found_hdd_to_defrag = False
+
+    try:
+        comando_ps_unidades = """
+        Get-Partition | 
+        Select-Object DriveLetter, @{Name='MediaType'; Expression={(Get-Disk -Partition $_).MediaType}} | 
+        Where-Object {$_.DriveLetter -ne $null} | 
+        Format-Table -HideTableHeaders
+        """
+        
+        resultado = subprocess.run(['powershell', '-Command', comando_ps_unidades],
+                                   capture_output=True, text=True, check=True, encoding='latin1')
+        
+        linhas = resultado.stdout.strip().split('\n')
+        
+        unidades_encontradas = []
+        for linha in linhas:
+            partes = linha.strip().split(maxsplit=1)
+            if len(partes) == 2:
+                letra = partes[0].strip()
+                media_type = partes[1].strip()
+                if letra and media_type:
+                    unidades_encontradas.append({'letra': letra + ':', 'media_type': media_type})
+
+        if not unidades_encontradas:
+            etapa_atual = ("Seu sistema não possui HDD. Não é recomendada a execução \ndesse procedimento em SSD, pois poderá \ncomprometer a vida útil do mesmo.")
+            return
+
+        etapa_atual = ("\nUnidades de disco encontradas:")
+        for unidade in unidades_encontradas:
+            etapa_atual = (f"- Unidade {unidade['letra']} (Tipo: {unidade['media_type']})")
+
+        etapa_atual = ("\nVerificando e desfragmentando HDDs...")
+        for unidade in unidades_encontradas:
+            letra_da_unidade = unidade['letra']
+            media_type = unidade['media_type']
+
+            if "HDD" in media_type:
+                found_hdd_to_defrag = True
+                etapa_atual = (f"\nDetectado HDD: {letra_da_unidade}. Iniciando desfragmentação...")
+                try:
+                    comando_desfrag = f"defrag {letra_da_unidade} /U /V"
+                    
+                    etapa_atual = (f"  Executando: {comando_desfrag}")
+                    subprocess.run(comando_desfrag, shell=True, check=True)
+                    etapa_atual = (f"Desfragmentação de {letra_da_unidade} concluída com sucesso.")
+                except subprocess.CalledProcessError as e:
+                    etapa_atual = (f"Erro ao desfragmentar {letra_da_unidade}: {e}")
+                    etapa_atual = (f"Stdout: {e.stdout}")
+                    etapa_atual = (f"Stderr: {e.stderr}")
+                except Exception as e:
+                    etapa_atual = (f"Ocorreu um erro durante a desfragmentação de {letra_da_unidade}: {e}")
+            elif "SSD" in media_type:
+                etapa_atual = (f"\nDetectado SSD: {letra_da_unidade}. Desfragmentação ignorada (não é recomendada para SSDs).")
+            else:
+                etapa_atual = (f"\nTipo de mídia desconhecido para {letra_da_unidade}: '{media_type}'. Desfragmentação ignorada.")
+
+    except subprocess.CalledProcessError as e:
+        etapa_atual = (f"Erro ao executar comando PowerShell para listar unidades: {e}")
+        etapa_atual = (f"Stdout: {e.stdout}")
+        etapa_atual = (f"Stderr: {e.stderr}")
+    except Exception as e:
+        etapa_atual = (f"Ocorreu um erro inesperado: {e}")
+
+    if not found_hdd_to_defrag:
+        etapa_atual = ("\nNenhum HDD foi encontrado para desfragmentação. Todas as unidades são SSDs ou de tipo desconhecido.")
+    else:
+        etapa_atual = ("\nProcesso de desfragmentação de HDDs concluído.")
+
+def executar_otimizacoes(selecionadas):
+    global etapa_atual
+    try:
+        if selecionadas["sfc"]:
+            sfc()
+        if selecionadas["limpezaDisco"]:
+            limpezaDisco()
+        if selecionadas["chkdsk"]:
+            chkdsk()
+        if selecionadas["diagnostico"]: 
+            diagnostico()
+        if selecionadas["desfragmentacao"]: 
+            desfragmentar()
+        if not selecionadas["reiniciar"] and not selecionadas["diagnostico"]:
+            messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!")
+        elif selecionadas["diagnostico"] and not selecionadas["reiniciar"]:
+             messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!\nO Diagnóstico de Memória foi agendado para a próxima reinicialização.")
+        elif selecionadas["diagnostico"] and selecionadas["reiniciar"]:
+            pass 
+
+        if selecionadas["reiniciar"]:
+            etapa_atual = "Reiniciando computador..."
+            time.sleep(3)
+            run_command_no_window("shutdown /r /f /t 0", shell_mode=True)
+        else:
+            etapa_atual = "Otimizações finalizadas. Reinicialização não solicitada."
+            
+    except subprocess.CalledProcessError as e:
+        etapa_atual = f"Erro no comando: {e.cmd}. Código de retorno: {e.returncode}"
+        messagebox.showerror("Erro de Execução", f"Ocorreu um erro ao executar um comando: {e.cmd}\nDetalhes: {e}")
+    except Exception as e:
+        etapa_atual = f"Erro geral: {e}"
+        messagebox.showerror("Erro Inesperado", f"Ocorreu um erro inesperado durante as otimizações: {e}")
+
+# Iniciar interface
+relogio_executando(get_etapa)

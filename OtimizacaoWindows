@@ -46,7 +46,7 @@ def relogio_executando(get_etapa):
     def iniciar_execucao():
         selecionadas = {
             "sfc": sfc_var.get(),
-            "limpeza": limpeza_var.get(),
+            "limpezaDisco": limpeza_var.get(),
             "chkdsk": chkdsk_var.get(),
             "diagnostico": diagnostico_var.get(),
             "desfragmentacao": desfrag_var.get(),
@@ -156,7 +156,7 @@ def sfc():
 def limpezaDisco():
     global etapa_atual
     etapa_atual = "Executando Limpeza de Disco..."
-    run_command_no_window(["cleanmgr", "/sagerun:99"], check_return=True)
+    subprocess.run(["cleanmgr", "/sagerun:99"], check=True)
 
 def chkdsk():
     global etapa_atual
@@ -271,7 +271,7 @@ def executar_otimizacoes(selecionadas):
     try:
         if selecionadas["sfc"]:
             sfc()
-        if selecionadas["limpeza"]:
+        if selecionadas["limpezaDisco"]:
             limpezaDisco()
         if selecionadas["chkdsk"]:
             chkdsk()
