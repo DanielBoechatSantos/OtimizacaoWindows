@@ -3,11 +3,10 @@ from tkinter import Label, Checkbutton, Button, BooleanVar, messagebox
 import time
 import threading
 import subprocess
-import sys # Importar sys para verificar o sistema operacional
+import sys
 
 etapa_atual = ""
 
-# A classe ToolTip não será mais usada para as checkboxes, mas a mantive caso precise para outros widgets
 class ToolTip:
     def __init__(self, widget, text):
         self.widget = widget
@@ -49,7 +48,7 @@ def relogio_executando(get_etapa):
             "sfc": sfc_var.get(),
             "limpeza": limpeza_var.get(),
             "chkdsk": chkdsk_var.get(),
-            "diagnostico": diagnostico_var.get(), # Corrigido: agora pega o valor booleano
+            "diagnostico": diagnostico_var.get(),
             "reiniciar": reiniciar_var.get()
         }
         threading.Thread(target=executar_otimizacoes, args=(selecionadas,), daemon=True).start()
@@ -84,7 +83,7 @@ def relogio_executando(get_etapa):
     sfc_var = BooleanVar()
     limpeza_var = BooleanVar()
     chkdsk_var = BooleanVar()
-    diagnostico_var = BooleanVar() # Corrigido: deve ser instanciado como BooleanVar()
+    diagnostico_var = BooleanVar()
     reiniciar_var = BooleanVar()
 
     opcoes = [
@@ -95,36 +94,27 @@ def relogio_executando(get_etapa):
         ("Reiniciar Computador", reiniciar_var, "Reinicia o computador imediatamente. Essencial após algumas otimizações para que as mudanças tenham efeito.")
     ]
 
-    # Frame para as checkboxes
     checkbox_frame = tk.Frame(janela, bg="black")
     checkbox_frame.pack(pady=10)
 
-    # Função para atualizar a descrição
     def atualizar_descricao(dica_texto):
         descricao_label.config(text=dica_texto)
 
-    # Organizar checkboxes em duas colunas (com 5 opções, resultará em 3 linhas)
     for i, (texto, var, dica) in enumerate(opcoes):
-        row = i % 3 # Ajustado para 3 linhas, pois 5 opções em 2 colunas exigem 3 linhas (2+2+1)
-        col = i // 3 # Ajustado para 3 colunas, mas como só há 2, a 3ª coluna ficará vazia na linha 0 e 1, e a 2ª coluna na linha 2.
-        # Melhor abordagem para 2 colunas e N itens:
-        # row = i // 2
-        # col = i % 2
-        # Mantendo o que o usuário tinha, mas ciente que para 5 itens em 2 colunas, o layout será 3x2.
-        # Vamos usar row = i // 2 e col = i % 2 para garantir 2 colunas e 3 linhas.
+        row = i % 3 
+        col = i // 3 
         row = i // 2
         col = i % 2
         cb = Checkbutton(checkbox_frame, text=texto, variable=var, bg="black", fg="white", selectcolor="black", font=("Arial", 10))
-        cb.grid(row=row, column=col, sticky="w", padx=15, pady=5) # Ajustar padx e pady para espaçamento
-        # Bind events para mostrar/limpar a descrição
+        cb.grid(row=row, column=col, sticky="w", padx=15, pady=5) 
         cb.bind("<Enter>", lambda event, d=dica: atualizar_descricao(d))
-        cb.bind("<Leave>", lambda event: atualizar_descricao("")) # Limpa ao sair
+        cb.bind("<Leave>", lambda event: atualizar_descricao("")) 
 
     # Área de texto para a descrição (a "telinha")
     descricao_label = Label(janela, text="", wraplength=450, justify=tk.LEFT,
                             font=("Arial", 9, "italic"), bg="gray20", fg="lightgray",
                             relief=tk.RIDGE, bd=2, padx=5, pady=5)
-    descricao_label.pack(pady=5, padx=20, fill=tk.X) # Adicionei fill=tk.X para ocupar a largura disponível
+    descricao_label.pack(pady=5, padx=20, fill=tk.X) 
 
     Button(
         janela, text="Iniciar", command=iniciar_execucao,
@@ -144,7 +134,6 @@ def relogio_executando(get_etapa):
 def get_etapa():
     return etapa_atual
 
-# Adicionei uma função auxiliar para aplicar as creationflags
 def run_command_no_window(command, shell_mode=False, check_return=False):
     creation_flags = 0
     if sys.platform == "win32":
@@ -155,28 +144,24 @@ def run_command_no_window(command, shell_mode=False, check_return=False):
     else:
         subprocess.run(command, creation_flags=creation_flags, check=check_return)
 
-# Funções de otimização
 def sfc():
     global etapa_atual
     etapa_atual = "Executando SFC /Scannow..."
-    # 'shell=True' é necessário para comandos como 'sfc /scannow'
     run_command_no_window("sfc /scannow", shell_mode=True)
 
 def limpezaDisco():
     global etapa_atual
     etapa_atual = "Executando Limpeza de Disco..."
-    # 'cleanmgr' não precisa de shell=True se passado como lista, mas 'sagerun' é argumento
     run_command_no_window(["cleanmgr", "/sagerun:99"], check_return=True)
 
 def chkdsk():
     global etapa_atual
     etapa_atual = "Executando CHKDSK..."
-    # 'shell=True' é necessário para 'chkdsk /F'
     run_command_no_window("chkdsk /F", shell_mode=True)
 
 def diagnostico():
-    global etapa_atual # Adicionado para atualizar a etapa global
-    etapa_atual = "Agendando Diagnóstico de Memória..." # Atualiza a etapa
+    global etapa_atual
+    etapa_atual = "Agendando Diagnóstico de Memória..."
     """
     Agenda o Diagnóstico de Memória do Windows para ser executado
     na próxima reinicialização do sistema.
@@ -214,29 +199,23 @@ def executar_otimizacoes(selecionadas):
             limpezaDisco()
         if selecionadas["chkdsk"]:
             chkdsk()
-        if selecionadas["diagnostico"]: # Adicionado o diagnóstico de memória aqui
+        if selecionadas["diagnostico"]: 
             diagnostico()
-        
-        # O messagebox de sucesso/erro será exibido aqui, antes ou depois do shutdown
-        # Se o diagnóstico de memória foi agendado, a mensagem final pode ser ajustada.
         if not selecionadas["reiniciar"] and not selecionadas["diagnostico"]:
             messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!")
         elif selecionadas["diagnostico"] and not selecionadas["reiniciar"]:
              messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!\nO Diagnóstico de Memória foi agendado para a próxima reinicialização.")
         elif selecionadas["diagnostico"] and selecionadas["reiniciar"]:
-            # A mensagem de reinicialização já cobrirá o diagnóstico agendado
             pass 
 
         if selecionadas["reiniciar"]:
             etapa_atual = "Reiniciando computador..."
             time.sleep(3)
-            # 'shell=True' é necessário para 'shutdown'
             run_command_no_window("shutdown /r /f /t 0", shell_mode=True)
         else:
             etapa_atual = "Otimizações finalizadas. Reinicialização não solicitada."
             
     except subprocess.CalledProcessError as e:
-        # Captura erros de comandos externos que falham (returncode != 0)
         etapa_atual = f"Erro no comando: {e.cmd}. Código de retorno: {e.returncode}"
         messagebox.showerror("Erro de Execução", f"Ocorreu um erro ao executar um comando: {e.cmd}\nDetalhes: {e}")
     except Exception as e:
