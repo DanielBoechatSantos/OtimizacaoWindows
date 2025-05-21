@@ -61,7 +61,7 @@ def relogio_executando(get_etapa):
     janela.title("Otimizador do Windows")
     janela.geometry("500x400") # Aumentei a altura para acomodar a área de descrição
     janela.configure(bg="black")
-    janela.attributes("-topmost", True)
+    #janela.attributes("-topmost", True)
     janela.attributes("-alpha", 0.9)
 
     label_relogio = Label(janela, font=("Arial", 36, "bold"), bg="black", fg="white")
