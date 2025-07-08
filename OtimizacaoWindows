@@ -5,7 +5,7 @@ import threading
 import subprocess
 import sys
 
-etapa_atual = ""
+etapa_atual = "Selecione as ações desejadas para execução"
 
 class ToolTip:
     def __init__(self, widget, text):
@@ -50,6 +50,9 @@ def relogio_executando(get_etapa):
             "chkdsk": chkdsk_var.get(),
             "diagnostico": diagnostico_var.get(),
             "desfragmentacao": desfrag_var.get(),
+            "redefinirRede": redefineRede_var.get(),
+            "restauraIntegridadeWindows": restauraIntegra_var.get(),
+            "verificaAtualizacaoPendente": verificaUpdate_var.get(),
             "reiniciar": reiniciar_var.get()
         }
         threading.Thread(target=executar_otimizacoes, args=(selecionadas,), daemon=True).start()
@@ -60,7 +63,7 @@ def relogio_executando(get_etapa):
 
     janela = tk.Tk()
     janela.title("Otimizador do Windows")
-    janela.geometry("500x450") # Aumentei a altura para acomodar a área de descrição
+    janela.geometry("500x550") # Aumentei a altura para acomodar a área de descrição
     janela.configure(bg="black")
     #janela.attributes("-topmost", True)
     janela.attributes("-alpha", 0.9)
@@ -80,21 +83,27 @@ def relogio_executando(get_etapa):
             time.sleep(1)
 
     # Checkboxes
-    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, desfrag_var, reiniciar_var
+    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, desfrag_var, redefineRede_var, restauraIntegra_var, verificaUpdate_var ,reiniciar_var
     sfc_var = BooleanVar()
     limpeza_var = BooleanVar()
     chkdsk_var = BooleanVar()
     diagnostico_var = BooleanVar()
     desfrag_var = BooleanVar()
+    redefineRede_var = BooleanVar()
+    restauraIntegra_var = BooleanVar()
+    verificaUpdate_var = BooleanVar()
     reiniciar_var = BooleanVar()
 
     opcoes = [
-        ("SFC /Scannow", sfc_var, "Verifica e repara arquivos corrompidos do sistema do Windows (requer privilégios de administrador e pode demorar)."),
+        ("Reparador de arquivos do sistema\n (SFC /Scannow)", sfc_var, "Verifica e repara arquivos corrompidos do sistema do Windows (requer privilégios de administrador e pode demorar)."),
         ("Limpeza de Disco", limpeza_var, "Remove arquivos temporários, arquivos de sistema e outros itens desnecessários para liberar espaço em disco. Pode ser um processo interativo."),
-        ("CHKDSK /F", chkdsk_var, "Verifica a integridade do sistema de arquivos e corrige erros lógicos no disco. Geralmente requer reinicialização para unidades em uso."),
+        ("Verificação de Disco \n(CHKDSK)", chkdsk_var, "Verifica a integridade do sistema de arquivos e corrige erros lógicos no disco. Geralmente requer reinicialização para unidades em uso."),
         ("Diagnóstico de Memória", diagnostico_var, "Realiza uma verificação da memória RAM. O processo é demorado, portanto, será executado somente na próxima reinicialização. Aconselha-se que, ao terminar o expediente, reinicie o computador para que seja efetuado o diagnóstico."),
         ("Desfragmentação de Disco", desfrag_var, """A desfragmentação não é recomendada caso utilize SSD, então por segurança, o sistema irá analisar os dispositivos de armazenamento em seu computador, e executará a desfragmentação apenas no HDD
          Caso não seja encontrado HDD, a desfragmentação não será executada."""),
+        ("Redefine configurações de Rede", redefineRede_var, "Redefine as configurações de rede, para quando o dispositivo aparentemente está conectado, mas sem navegação na internet. Será necessário colocar novamente a senha do Wifi"),
+        ("Verificar Integridade do Windows", restauraIntegra_var, "Irá verificar e restaurar arquivos, registros e recursos do Windows que esteja corrompidos. Necessário estar conectado à internet para essa correção. A reinicialização é necessária. Processo pode ser demorado."),
+        ("Verifica Atualizações Pendentes", verificaUpdate_var, "Verifica se há atualizações pendentes, faz o download e as aplica. Pode incluir atualizações de drivers. A reinicialização é necessária e o processo pode demorar."),
         ("Reiniciar Computador", reiniciar_var, "Reinicia o computador imediatamente. Essencial após algumas otimizações para que as mudanças tenham efeito.")
     ]
 
@@ -115,7 +124,7 @@ def relogio_executando(get_etapa):
         cb.bind("<Leave>", lambda event: atualizar_descricao("")) 
 
     # Área de texto para a descrição (a "telinha")
-    descricao_label = Label(janela, text="", wraplength=450, justify=tk.LEFT,
+    descricao_label = Label(janela, text="Passe o mouse nas opções para verificar o que será feito. Marque as opções desejados e clique em Iniciar", wraplength=450, justify=tk.LEFT,
                             font=("Arial", 9, "italic"), bg="gray20", fg="lightgray",
                             relief=tk.RIDGE, bd=2, padx=5, pady=5)
     descricao_label.pack(pady=5, padx=20, fill=tk.X) 
@@ -162,6 +171,21 @@ def chkdsk():
     global etapa_atual
     etapa_atual = "Executando CHKDSK..."
     run_command_no_window("chkdsk /F", shell_mode=True)
+
+def netsh():
+    global etapa_atual
+    etapa_atual = "Redefinindo as configurações de rede (comando: netsh winsock reset)"
+    run_command_no_window("netsh winsock reset", shell_mode=True)
+
+def wuauclt():
+    global etapa_atual
+    etapa_atual = "Buscando por atualização de recursos de drives (comando: wuauclt /ddetectnow)"
+    run_command_no_window("wuauclt /ddetectnow", shell_mode=True)
+
+def dism():
+    global etapa_atual
+    etapa_atual = "Efetuando a reparação Online da interidade dos arquivos do Windows  (comando: dism /online /cleanup-image /restorehealth)"
+    run_command_no_window("dism /online /cleanup-image /restorehealth", shell_mode=True)
 
 def diagnostico():
     global etapa_atual
@@ -277,6 +301,12 @@ def executar_otimizacoes(selecionadas):
             chkdsk()
         if selecionadas["diagnostico"]: 
             diagnostico()
+        if selecionadas["redefinirRede"]: 
+            netsh()
+        if selecionadas["restauraIntegridadeWindows"]: 
+            dism()
+        if selecionadas["verificaAtualizacaoPendente"]: 
+            wuauclt()
         if selecionadas["desfragmentacao"]: 
             desfragmentar()
         if not selecionadas["reiniciar"] and not selecionadas["diagnostico"]:
