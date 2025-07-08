@@ -4,6 +4,9 @@ import time
 import threading
 import subprocess
 import sys
+import os
+import shutil
+import getpass
 
 etapa_atual = "Selecione as ações desejadas para execução"
 
@@ -30,7 +33,7 @@ class ToolTip:
             justify=tk.LEFT,
             background="#ffffe0",
             relief=tk.SOLID,
-            borderwidth=1,
+            borderwidth=10,
             font=("Arial", 9),
             fg="black"
         )
@@ -53,6 +56,7 @@ def relogio_executando(get_etapa):
             "redefinirRede": redefineRede_var.get(),
             "restauraIntegridadeWindows": restauraIntegra_var.get(),
             "verificaAtualizacaoPendente": verificaUpdate_var.get(),
+            "limparTemp": limpar_temp_var.get(),
             "reiniciar": reiniciar_var.get()
         }
         threading.Thread(target=executar_otimizacoes, args=(selecionadas,), daemon=True).start()
@@ -63,9 +67,8 @@ def relogio_executando(get_etapa):
 
     janela = tk.Tk()
     janela.title("Otimizador do Windows")
-    janela.geometry("500x550") # Aumentei a altura para acomodar a área de descrição
+    janela.geometry("500x550")
     janela.configure(bg="black")
-    #janela.attributes("-topmost", True)
     janela.attributes("-alpha", 0.9)
 
     label_relogio = Label(janela, font=("Arial", 36, "bold"), bg="black", fg="white")
@@ -83,7 +86,7 @@ def relogio_executando(get_etapa):
             time.sleep(1)
 
     # Checkboxes
-    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, desfrag_var, redefineRede_var, restauraIntegra_var, verificaUpdate_var ,reiniciar_var
+    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, desfrag_var, redefineRede_var, restauraIntegra_var, verificaUpdate_var, limpar_temp_var ,reiniciar_var
     sfc_var = BooleanVar()
     limpeza_var = BooleanVar()
     chkdsk_var = BooleanVar()
@@ -92,6 +95,7 @@ def relogio_executando(get_etapa):
     redefineRede_var = BooleanVar()
     restauraIntegra_var = BooleanVar()
     verificaUpdate_var = BooleanVar()
+    limpar_temp_var = BooleanVar()
     reiniciar_var = BooleanVar()
 
     opcoes = [
@@ -104,6 +108,7 @@ def relogio_executando(get_etapa):
         ("Redefine configurações de Rede", redefineRede_var, "Redefine as configurações de rede, para quando o dispositivo aparentemente está conectado, mas sem navegação na internet. Será necessário colocar novamente a senha do Wifi"),
         ("Verificar Integridade do Windows", restauraIntegra_var, "Irá verificar e restaurar arquivos, registros e recursos do Windows que esteja corrompidos. Necessário estar conectado à internet para essa correção. A reinicialização é necessária. Processo pode ser demorado."),
         ("Verifica Atualizações Pendentes", verificaUpdate_var, "Verifica se há atualizações pendentes, faz o download e as aplica. Pode incluir atualizações de drivers. A reinicialização é necessária e o processo pode demorar."),
+        ("Limpar a Pasta Temporária", limpar_temp_var, "Verifica se há atualizações pendentes, faz o download e as aplica. Pode incluir atualizações de drivers. A reinicialização é necessária e o processo pode demorar."),
         ("Reiniciar Computador", reiniciar_var, "Reinicia o computador imediatamente. Essencial após algumas otimizações para que as mudanças tenham efeito.")
     ]
 
@@ -123,7 +128,6 @@ def relogio_executando(get_etapa):
         cb.bind("<Enter>", lambda event, d=dica: atualizar_descricao(d))
         cb.bind("<Leave>", lambda event: atualizar_descricao("")) 
 
-    # Área de texto para a descrição (a "telinha")
     descricao_label = Label(janela, text="Passe o mouse nas opções para verificar o que será feito. Marque as opções desejados e clique em Iniciar", wraplength=450, justify=tk.LEFT,
                             font=("Arial", 9, "italic"), bg="gray20", fg="lightgray",
                             relief=tk.RIDGE, bd=2, padx=5, pady=5)
@@ -157,6 +161,22 @@ def run_command_no_window(command, shell_mode=False, check_return=False):
     else:
         subprocess.run(command, creation_flags=creation_flags, check=check_return)
 
+def limpar_temp():
+    global etapa_atual
+    etapa_atual = "Limpando a pasta Temp do AppData..."
+
+    temp_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Temp')
+
+    for item in os.listdir(temp_path):
+        item_path = os.path.join(temp_path, item)
+        try:
+            if os.path.isfile(item_path) or os.path.islink(item_path):
+                os.unlink(item_path)
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+        except Exception as e:
+            pass  # Silencioso: ignora qualquer erro de permissão ou arquivo em uso
+
 def sfc():
     global etapa_atual
     etapa_atual = "Executando SFC /Scannow..."
@@ -174,17 +194,17 @@ def chkdsk():
 
 def netsh():
     global etapa_atual
-    etapa_atual = "Redefinindo as configurações de rede (comando: netsh winsock reset)"
+    etapa_atual = "Redefinindo as configurações de rede\n (comando: netsh winsock reset)"
     run_command_no_window("netsh winsock reset", shell_mode=True)
 
 def wuauclt():
     global etapa_atual
-    etapa_atual = "Buscando por atualização de recursos de drives (comando: wuauclt /ddetectnow)"
+    etapa_atual = "Buscando por atualização de recursos de drives\n (comando: wuauclt /ddetectnow)"
     run_command_no_window("wuauclt /ddetectnow", shell_mode=True)
 
 def dism():
     global etapa_atual
-    etapa_atual = "Efetuando a reparação Online da interidade dos arquivos do Windows  (comando: dism /online /cleanup-image /restorehealth)"
+    etapa_atual = "Efetuando a reparação Online da interidade dos arquivos do Windows\n  (comando: dism /online /cleanup-image /restorehealth)"
     run_command_no_window("dism /online /cleanup-image /restorehealth", shell_mode=True)
 
 def diagnostico():
@@ -295,24 +315,37 @@ def executar_otimizacoes(selecionadas):
     try:
         if selecionadas["sfc"]:
             sfc()
+
         if selecionadas["limpezaDisco"]:
             limpezaDisco()
+
         if selecionadas["chkdsk"]:
             chkdsk()
+
         if selecionadas["diagnostico"]: 
             diagnostico()
+
         if selecionadas["redefinirRede"]: 
             netsh()
+
         if selecionadas["restauraIntegridadeWindows"]: 
             dism()
+
         if selecionadas["verificaAtualizacaoPendente"]: 
             wuauclt()
+
         if selecionadas["desfragmentacao"]: 
             desfragmentar()
+
+        if selecionadas["limparTemp"]: 
+            limpar_temp()
+
         if not selecionadas["reiniciar"] and not selecionadas["diagnostico"]:
-            messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!")
+            messagebox.showinfo("AVISO", "Otimizações de sistema finalizadas com sucesso!")
+
         elif selecionadas["diagnostico"] and not selecionadas["reiniciar"]:
-             messagebox.showinfo("Otimizador", "Otimizações de disco e sistema finalizadas com sucesso!\nO Diagnóstico de Memória foi agendado para a próxima reinicialização.")
+             messagebox.showinfo("AVISO", "Otimizações de sistema finalizadas com sucesso!\nO Diagnóstico de Memória foi agendado para a próxima reinicialização.")
+
         elif selecionadas["diagnostico"] and selecionadas["reiniciar"]:
             pass 
 
