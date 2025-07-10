@@ -11,6 +11,8 @@ import psutil
 
 etapa_atual = "Selecione as ações desejadas para execução"
 
+versao = "1.2 BETA"
+
 class ToolTip:
     def __init__(self, widget, text):
         self.widget = widget
@@ -67,7 +69,7 @@ def relogio_executando(get_etapa):
         janela.quit()
 
     janela = tk.Tk()
-    janela.title("Otimizador do Windows")
+    janela.title(f"Otimizador do Windows ({versao})")
     janela.geometry("500x550")
     janela.configure(bg="black")
     janela.attributes("-alpha", 0.9)
@@ -407,7 +409,7 @@ def sugerir_acoes_interface():
     verificaUpdate_var.set(sugeridas["verificaAtualizacaoPendente"])
     limpar_temp_var.set(sugeridas["limparTemp"])
     reiniciar_var.set(sugeridas["reiniciar"])
-    messagebox.showinfo("Sugestões Aplicadas", "As otimizações sugeridas foram marcadas automaticamente.")
+    messagebox.showinfo("Sugestões Aplicadas", "As otimizações sugeridas foram marcadas.")
 
 
 def executar_otimizacoes(selecionadas):
@@ -466,13 +468,13 @@ def executar_otimizacoes(selecionadas):
 # Iniciar interface
 def iniciar_com_verificacao():
     preload = tk.Tk()
-    preload.title("Otimizador do Windows")
+    preload.title(f"Otimizador do Windows {versao}")
     preload.geometry("400x150")
     preload.configure(bg="black")
     preload.attributes("-topmost", True)
     preload.attributes("-alpha", 0.95)
 
-    lbl = tk.Label(preload, text="Verificando seu sistema para sugerir ações de otimização...",
+    lbl = tk.Label(preload, text=f"Verificando seu sistema para sugerir ações de otimização...\n\nVersão {versao}",
                    bg="black", fg="white", font=("Arial", 11), wraplength=380)
     lbl.pack(expand=True, fill=tk.BOTH, padx=20, pady=40)
     preload.update()
