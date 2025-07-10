@@ -7,6 +7,7 @@ import sys
 import os
 import shutil
 import getpass
+import psutil
 
 etapa_atual = "Selecione as ações desejadas para execução"
 
@@ -310,6 +311,82 @@ def desfragmentar():
     else:
         etapa_atual = ("\nProcesso de desfragmentação de HDDs concluído.")
 
+def sugerir_acoes():
+    """
+    Faz análise do sistema e retorna sugestões automáticas.
+    """
+    acoes_sugeridas = {
+        "sfc": False,
+        "limpezaDisco": False,
+        "chkdsk": False,
+        "diagnostico": False,
+        "desfragmentacao": False,
+        "redefinirRede": False,
+        "restauraIntegridadeWindows": False,
+        "verificaAtualizacaoPendente": False,
+        "limparTemp": False,
+        "reiniciar": False
+    }
+
+    try:
+        # 1. Verifica se sistema está há muito tempo ligado
+        tempo_atividade = time.time() - psutil.boot_time()
+        if tempo_atividade > 60 * 60 * 72:  # 72 horas
+            acoes_sugeridas["reiniciar"] = True
+
+        # 2. Verifica espaço em disco
+        disco = psutil.disk_usage('/')
+        if disco.percent > 85:
+            acoes_sugeridas["limpezaDisco"] = True
+
+        # 3. Verifica arquivos temporários
+        temp_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Temp')
+        arquivos = os.listdir(temp_path)
+        if len(arquivos) > 30:
+            acoes_sugeridas["limparTemp"] = True
+
+        # 4. Verifica tipo de rede e se há conectividade
+        try:
+            subprocess.check_output("ping www.google.com -n 1", shell=True)
+        except:
+            acoes_sugeridas["redefinirRede"] = True
+
+        # 5. Detecta se há atualizações pendentes
+        try:
+            comando = '(New-Object -ComObject Microsoft.Update.AutoUpdate).Results'
+            resultado = subprocess.run(["powershell", "-Command", comando], capture_output=True, text=True)
+            if "Pending" in resultado.stdout or "Updates" in resultado.stdout:
+                acoes_sugeridas["verificaAtualizacaoPendente"] = True
+        except:
+            pass
+
+        # 6. Executa sfc se Windows
+        if sys.platform == "win32":
+            acoes_sugeridas["sfc"] = True
+
+        # 7. Sugestão padrão de diagnóstico (1x por mês)
+        if tempo_atividade > 60 * 60 * 24 * 15:  # 15 dias
+            acoes_sugeridas["diagnostico"] = True
+
+        # 8. Verifica se disco é HDD para sugerir desfragmentação
+        try:
+            resultado = subprocess.run(['powershell', '-Command',
+                "Get-PhysicalDisk | Select-Object MediaType"], capture_output=True, text=True)
+            if "HDD" in resultado.stdout:
+                acoes_sugeridas["desfragmentacao"] = True
+        except:
+            pass
+
+        # 9. Sugere DISM se muitos processos ativos (heurística leve)
+        if len(psutil.pids()) > 250:
+            acoes_sugeridas["restauraIntegridadeWindows"] = True
+
+    except Exception as e:
+        print(f"[!] Erro ao sugerir ações: {e}")
+
+    return acoes_sugeridas
+
+
 def executar_otimizacoes(selecionadas):
     global etapa_atual
     try:
@@ -364,4 +441,39 @@ def executar_otimizacoes(selecionadas):
         messagebox.showerror("Erro Inesperado", f"Ocorreu um erro inesperado durante as otimizações: {e}")
 
 # Iniciar interface
-relogio_executando(get_etapa)
+def iniciar_com_verificacao():
+    preload = tk.Tk()
+    preload.title("Otimizador do Windows")
+    preload.geometry("400x150")
+    preload.configure(bg="black")
+    preload.attributes("-topmost", True)
+    preload.attributes("-alpha", 0.95)
+
+    lbl = tk.Label(preload, text="Verificando seu sistema para sugerir ações de otimização...",
+                   bg="black", fg="white", font=("Arial", 11), wraplength=380)
+    lbl.pack(expand=True, fill=tk.BOTH, padx=20, pady=40)
+    preload.update()
+
+    # Verifica ações sugeridas
+    sugeridas = sugerir_acoes()
+
+    # Armazena os valores em variáveis globais para a interface usar
+    global sfc_var, limpeza_var, chkdsk_var, diagnostico_var, desfrag_var
+    global redefineRede_var, restauraIntegra_var, verificaUpdate_var, limpar_temp_var, reiniciar_var
+
+    sfc_var = tk.BooleanVar(value=sugeridas["sfc"])
+    limpeza_var = tk.BooleanVar(value=sugeridas["limpezaDisco"])
+    chkdsk_var = tk.BooleanVar(value=sugeridas["chkdsk"])
+    diagnostico_var = tk.BooleanVar(value=sugeridas["diagnostico"])
+    desfrag_var = tk.BooleanVar(value=sugeridas["desfragmentacao"])
+    redefineRede_var = tk.BooleanVar(value=sugeridas["redefinirRede"])
+    restauraIntegra_var = tk.BooleanVar(value=sugeridas["restauraIntegridadeWindows"])
+    verificaUpdate_var = tk.BooleanVar(value=sugeridas["verificaAtualizacaoPendente"])
+    limpar_temp_var = tk.BooleanVar(value=sugeridas["limparTemp"])
+    reiniciar_var = tk.BooleanVar(value=sugeridas["reiniciar"])
+
+    preload.destroy()
+    relogio_executando(get_etapa)
+
+# Iniciar com verificação automática
+iniciar_com_verificacao()
