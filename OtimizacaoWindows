@@ -9,7 +9,7 @@ import shutil
 import getpass
 import psutil
 
-etapa_atual = "Selecione as ações desejadas para execução"
+etapa_atual = "Selecione as ações desejadas para execução ou clique em \nsugerir automaticamente para marcar as opções recomendadas\nconforme análise inicial.\n\nPasse o mouse pelas opções, para visualizar que cada ação faz."
 
 versao = "1.2 BETA"
 
@@ -70,7 +70,7 @@ def relogio_executando(get_etapa):
 
     janela = tk.Tk()
     janela.title(f"Otimizador do Windows ({versao})")
-    janela.geometry("500x550")
+    janela.geometry("500x650")
     janela.configure(bg="black")
     janela.attributes("-alpha", 0.9)
 
@@ -474,8 +474,8 @@ def iniciar_com_verificacao():
     preload.attributes("-topmost", True)
     preload.attributes("-alpha", 0.95)
 
-    lbl = tk.Label(preload, text=f"Verificando seu sistema para sugerir ações de otimização...\n\nVersão {versao}",
-                   bg="black", fg="white", font=("Arial", 11), wraplength=380)
+    lbl = tk.Label(preload, text=f"Verificando seu sistema para sugerir ações de otimização...\n\nAguarde!!!\nVersão {versao}",
+                   bg="black", fg="white", font=("Arial", 10), wraplength=380)
     lbl.pack(expand=True, fill=tk.BOTH, padx=20, pady=40)
     preload.update()
 
