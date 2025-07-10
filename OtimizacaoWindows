@@ -137,14 +137,23 @@ def relogio_executando(get_etapa):
     Button(
         janela, text="Iniciar", command=iniciar_execucao,
         bg="green", fg="white", font=("Arial", 10, "bold"),
-        width=20, height=2
+        width=25, height=2
         ).pack(pady=5)
 
     Button(
         janela, text="Abortar", command=abortar,
         bg="red", fg="white", font=("Arial", 10, "bold"),
-        width=20, height=2
+        width=25, height=2
         ).pack()
+
+    Button(
+        janela,
+        text="Sugerir automaticamente",
+        command=sugerir_acoes_interface,
+        bg="blue", fg="white",
+        font=("Arial", 10, "bold"),
+        width=25, height=2
+    ).pack(pady=5)
 
     threading.Thread(target=atualizar_relogio, daemon=True).start()
     janela.mainloop()
@@ -385,6 +394,20 @@ def sugerir_acoes():
         print(f"[!] Erro ao sugerir ações: {e}")
 
     return acoes_sugeridas
+
+def sugerir_acoes_interface():
+    sugeridas = sugerir_acoes()
+    sfc_var.set(sugeridas["sfc"])
+    limpeza_var.set(sugeridas["limpezaDisco"])
+    chkdsk_var.set(sugeridas["chkdsk"])
+    diagnostico_var.set(sugeridas["diagnostico"])
+    desfrag_var.set(sugeridas["desfragmentacao"])
+    redefineRede_var.set(sugeridas["redefinirRede"])
+    restauraIntegra_var.set(sugeridas["restauraIntegridadeWindows"])
+    verificaUpdate_var.set(sugeridas["verificaAtualizacaoPendente"])
+    limpar_temp_var.set(sugeridas["limparTemp"])
+    reiniciar_var.set(sugeridas["reiniciar"])
+    messagebox.showinfo("Sugestões Aplicadas", "As otimizações sugeridas foram marcadas automaticamente.")
 
 
 def executar_otimizacoes(selecionadas):
