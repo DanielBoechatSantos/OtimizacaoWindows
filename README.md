@@ -53,7 +53,7 @@ Antes de rodar o projeto, você precisará:
 2.  Certifique-se de que o arquivo `OpenHardwareMonitorLib.dll` está na mesma pasta que o script.
 3. Instale as dependências:
    \\\ash
-   pip install psutil
+   pip install psutil pythonnet
    \\\
 4.  **Importante**: Clique com o botão direito na DLL -> Propriedades -> Marque **Desbloquear**.
 5.  Execute a aplicação:
