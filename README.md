@@ -23,7 +23,7 @@ Uma ferramenta gráfica moderna desenvolvida em Python para centralizar e automa
 - **Alta Precisão**: Diferente da API WMI padrão, utiliza drivers de baixo nível para leitura real do die da CPU.
 
 ## 📸 Preview
-![Preview](preview.png)
+<img width="825" height="952" alt="preview" src="https://github.com/user-attachments/assets/61ad2bb7-71a5-43bf-9cae-b02a8175c735" />
 
 ## 🖥️ Pré-requisitos
 
