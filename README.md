@@ -50,6 +50,7 @@ Antes de rodar o projeto, você precisará:
     ```bash
    git clone https://github.com/DanielBoechatSantos/OtimizacaoWindows.git
     ```
+    
 2.  Certifique-se de que o arquivo `OpenHardwareMonitorLib.dll` está na mesma pasta que o script.
 3. Instale as dependências:
    \\\ash
