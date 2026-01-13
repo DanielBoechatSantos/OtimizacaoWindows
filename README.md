@@ -48,9 +48,8 @@ Antes de rodar o projeto, você precisará:
 
 1.  Clone o repositório:
     ```bash
-   git clone https://github.com/DanielBoechatSantos/OtimizacaoWindows.git
-    ```
-    
+      git clone https://github.com/DanielBoechatSantos/OtimizacaoWindows.git
+    ```    
 2.  Certifique-se de que o arquivo `OpenHardwareMonitorLib.dll` está na mesma pasta que o script.
 3. Instale as dependências:
    \\\ash
@@ -59,7 +58,7 @@ Antes de rodar o projeto, você precisará:
 4.  **Importante**: Clique com o botão direito na DLL -> Propriedades -> Marque **Desbloquear**.
 5.  Execute a aplicação:
     ```bash
-   python OtimizacaoWindows.py
+      python OtimizacaoWindows.py
     ```
 
 ## ⚠️ Aviso
