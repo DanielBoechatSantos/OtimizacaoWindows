@@ -1,3 +1,4 @@
+from PyQt5.QtGui import QFont, QIcon, QColor
 import tkinter as tk
 from tkinter import messagebox, ttk
 import time
@@ -21,6 +22,15 @@ COR_AMARELO = "#ffeb3b"
 COR_CARD = "#3c3c3c"
 COR_RODAPE = "#888888"
 
+def resource_path(relative_path):
+    """ Obtém o caminho absoluto para recursos, compatível com PyInstaller/auto-py-to-exe """
+    try:
+        # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 # --- Lógica de Hardware (DLL) ---
 class SensorHardware:
     def __init__(self):
@@ -28,7 +38,13 @@ class SensorHardware:
         self.temp_max = 0.0
         self.ativo = False
         try:
-            dll_path = os.path.join(os.path.dirname(__file__), "OpenHardwareMonitorLib.dll")
+            # Busca a DLL no caminho correto (seja pasta local ou temporária do EXE)
+            dll_path = resource_path("OpenHardwareMonitorLib.dll")
+            
+            if not os.path.exists(dll_path):
+                print(f"DLL não encontrada em: {dll_path}")
+                return
+
             clr.AddReference(dll_path)
             from OpenHardwareMonitor.Hardware import Computer
             self.pc = Computer()
@@ -36,7 +52,7 @@ class SensorHardware:
             self.pc.Open()
             self.ativo = True
         except Exception as e:
-            print(f"Erro ao carregar sensores: {e}")
+            print(f"Erro crítico ao carregar sensores: {e}")
 
     def ler_cpu(self):
         if not self.ativo: return 0.0
@@ -47,9 +63,10 @@ class SensorHardware:
                 for sensor in hardware.Sensors:
                     if str(sensor.SensorType) == 'Temperature':
                         temp = sensor.Value
-                        if temp < self.temp_min: self.temp_min = temp
-                        if temp > self.temp_max: self.temp_max = temp
-                        return temp
+                        if temp is not None:
+                            if temp < self.temp_min: self.temp_min = temp
+                            if temp > self.temp_max: self.temp_max = temp
+                            return temp
         except: pass
         return temp
 
@@ -136,24 +153,22 @@ class OtimizadorApp:
         }
 
         self.status_text = tk.StringVar()
-        self.status_text.set("Analizando sistema...")
+        self.status_text.set("Analisando sistema...")
         self.relogio_text = tk.StringVar()
         self.mapa_discos = {} 
 
         self._mapear_discos()
-        self._setup_ui() # Aqui criamos os elementos visuais
+        self._setup_ui()
         self._iniciar_verificacao_background()
         self._iniciar_monitor_termico()
 
     def _setup_ui(self):
-        # --- Cabeçalho ---
         header_frame = tk.Frame(self.root, bg=COR_FUNDO)
         header_frame.pack(pady=(15, 5), fill=tk.X)
 
         lbl_relogio = tk.Label(header_frame, textvariable=self.relogio_text, font=("Segoe UI", 28, "bold"), bg=COR_FUNDO, fg=COR_TEXTO)
         lbl_relogio.pack()
 
-        # --- PAINEL LCD TÉRMICO (CORRIGIDO) ---
         thermal_frame = tk.Frame(self.root, bg=COR_FUNDO)
         thermal_frame.pack(pady=10, fill=tk.X, padx=25)
 
@@ -174,7 +189,6 @@ class OtimizadorApp:
                                           font=("Segoe UI", 9, "italic"), bg=COR_FUNDO, fg=COR_VERDE, wraplength=350, justify=tk.LEFT)
         self.lbl_alerta_termico.pack(side=tk.RIGHT, padx=10)
 
-        # --- Área de Opções ---
         container = tk.Frame(self.root, bg=COR_FUNDO)
         container.pack(padx=25, pady=10, fill=tk.BOTH, expand=True)
 
@@ -205,13 +219,11 @@ class OtimizadorApp:
             toggle.pack(side=tk.RIGHT)
             ToolTip(card, dica)
 
-        # --- Área de Status ---
         status_frame = tk.Frame(self.root, bg="#1e1e1e", padx=15, pady=15)
         status_frame.pack(fill=tk.X, padx=25, pady=10)
         tk.Label(status_frame, text="Status Atual:", font=("Segoe UI", 9, "bold"), bg="#1e1e1e", fg="#aaaaaa").pack(anchor="w")
         tk.Label(status_frame, textvariable=self.status_text, font=("Segoe UI", 10), bg="#1e1e1e", fg=COR_DESTAQUE, wraplength=700, justify=tk.LEFT).pack(anchor="w", fill=tk.X)
 
-        # --- Botões ---
         btn_frame = tk.Frame(self.root, bg=COR_FUNDO)
         btn_frame.pack(pady=15)
         self._criar_botao(btn_frame, "INICIAR OTIMIZAÇÃO", self.iniciar_execucao, COR_VERDE).pack(side=tk.LEFT, padx=10)
@@ -225,14 +237,18 @@ class OtimizadorApp:
     def _iniciar_monitor_termico(self):
         def update():
             while True:
+                if not self.root.winfo_exists(): break
                 temp = self.sensor.ler_cpu()
-                if self.root.winfo_exists():
-                    self.root.after(0, lambda t=temp: self._atualizar_ui_termica(t))
+                self.root.after(0, lambda t=temp: self._atualizar_ui_termica(t))
                 time.sleep(2)
         threading.Thread(target=update, daemon=True).start()
 
     def _atualizar_ui_termica(self, temp):
-        if temp <= 0: return
+        if temp <= 0: 
+            self.lbl_cpu_temp.config(text="Erro", fg=COR_VERMELHO)
+            self.lbl_alerta_termico.config(text="⚠ Falha ao ler sensores (DLL não carregada ou requer Admin)", fg=COR_AMARELO)
+            return
+            
         if temp < 60:
             cor, status = COR_VERDE, "✓ Sistema Operando em Temperatura Ideal"
         elif temp < 80:
@@ -245,7 +261,6 @@ class OtimizadorApp:
         self.lbl_min_max.config(text=f"MIN: {self.sensor.temp_min:.1f}°C\nMAX: {self.sensor.temp_max:.1f}°C")
         self.lbl_alerta_termico.config(text=status, fg=cor)
 
-    # --- Funções de Disco e Sistema ---
     def _mapear_discos(self):
         self.mapa_discos = {}
         try:
@@ -259,7 +274,7 @@ class OtimizadorApp:
     def exibir_info_sistema(self):
         info_win = tk.Toplevel(self.root)
         info_win.title("Sobre seu Computador")
-        info_win.geometry("600x700")
+        info_win.geometry("600x400")
         info_win.configure(bg="#202020")
         info_win.transient(self.root)
         info_win.grab_set()
@@ -275,6 +290,7 @@ class OtimizadorApp:
 
         add_line("Processador:", platform.processor())
         add_line("RAM:", f"{psutil.virtual_memory().total / (1024**3):.1f} GB")
+        add_line("S.O:", f"{platform.system()} {platform.release()}")
         
         tk.Button(info_win, text="Fechar", command=info_win.destroy, bg="#444", fg="white", relief=tk.FLAT).pack(pady=10)
 
@@ -282,7 +298,7 @@ class OtimizadorApp:
         if self.vars["desfragmentacao"].get(): return True
         hdds = [l for l, t in self.mapa_discos.items() if t == "HDD"]
         if not hdds:
-            messagebox.showwarning("Bloqueado", "SSD detectado. Desfragmentação desnecessária.")
+            messagebox.showwarning("Bloqueado", "SSD detectado. Desfragmentação desnecessária em SSDs.")
             return False
         return True
 
@@ -294,8 +310,10 @@ class OtimizadorApp:
         return btn
 
     def _ajustar_brilho(self, hex_color, factor):
-        r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
-        return f"#{min(255, int(r*factor)):02x}{min(255, int(g*factor)):02x}{min(255, int(b*factor)):02x}"
+        try:
+            r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+            return f"#{min(255, int(r*factor)):02x}{min(255, int(g*factor)):02x}{min(255, int(b*factor)):02x}"
+        except: return hex_color
 
     def _atualizar_relogio(self):
         self.relogio_text.set(time.strftime("%H:%M:%S"))
@@ -308,28 +326,35 @@ class OtimizadorApp:
         subprocess.run(command, shell=shell_mode, creationflags=subprocess.CREATE_NO_WINDOW)
 
     def sugerir_acoes(self, silent=False):
-        sugestao = {k: False for k in self.vars}
-        if psutil.disk_usage('C:').percent > 85: sugestao["limpezaDisco"] = True
-        if len(os.listdir(os.path.join(os.getenv('LOCALAPPDATA'), 'Temp'))) > 30: sugestao["limparTemp"] = True
-        
-        for k, v in sugestao.items():
-            if v: self.vars[k].set(True)
+        try:
+            if psutil.disk_usage('C:').percent > 85: self.vars["limpezaDisco"].set(True)
+            temp_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Temp')
+            if os.exists(temp_path) and len(os.listdir(temp_path)) > 30: self.vars["limparTemp"].set(True)
+        except: pass
         self._update_status("Sistema pronto.")
 
     def iniciar_execucao(self):
-        if not any(v.get() for v in self.vars.values()): return
-        self.status_text.set("Iniciando...")
+        if not any(v.get() for v in self.vars.values()): 
+            messagebox.showwarning("Aviso", "Selecione ao menos uma opção.")
+            return
+        self.status_text.set("Iniciando otimização...")
         threading.Thread(target=self._processar_fila, daemon=True).start()
 
     def _processar_fila(self):
         sel = {k: v.get() for k, v in self.vars.items()}
-        if sel["limparTemp"]: self._limpar_temp()
-        if sel["sfc"]: self.run_command("sfc /scannow", True)
+        if sel["limparTemp"]: 
+            self._update_status("Limpando arquivos temporários...")
+            self._limpar_temp()
+        if sel["sfc"]: 
+            self._update_status("Executando SFC Scannow (pode demorar)...")
+            self.run_command("sfc /scannow", True)
+        
         self._update_status("Concluído!")
         messagebox.showinfo("Sucesso", "Otimização concluída!")
 
     def _update_status(self, texto):
-        self.root.after(0, lambda: self.status_text.set(texto))
+        if self.root.winfo_exists():
+            self.root.after(0, lambda: self.status_text.set(texto))
 
     def _limpar_temp(self):
         p = os.path.join(os.getenv('LOCALAPPDATA'), 'Temp')
@@ -344,7 +369,7 @@ if __name__ == "__main__":
     import ctypes
     if not ctypes.windll.shell32.IsUserAnAdmin():
         root = tk.Tk(); root.withdraw()
-        messagebox.showwarning("Erro", "Execute como Administrador!")
+        messagebox.showwarning("Permissão Necessária", "Este aplicativo precisa de privilégios de Administrador para acessar os sensores de temperatura e reparar o sistema.")
         root.destroy()
     else:
         root = tk.Tk()
