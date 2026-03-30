@@ -29,6 +29,7 @@ Uma ferramenta gráfica moderna desenvolvida em Python para centralizar e automa
 
 **Abre uma sugestão de serviços extras do Windows que podem ser desativados, onde o usuário poderá escolher. Nos serviços, é explicado o que faz e o ganho de desempenho esperado.**
 
+📸 Preview da Janela
 <img width="501" height="635" alt="image" src="https://github.com/user-attachments/assets/8d6a68d3-62e4-48c7-8818-747279733575" />
 
 
@@ -70,6 +71,23 @@ Antes de rodar o projeto, você precisará:
 
 ## ⚠️ Aviso
 Este software executa comandos de manutenção de baixo nível no Windows. Use com responsabilidade.
+
+
+## ☕ Apoie o Projeto
+**Se este projeto te ajudou de alguma forma, considere fazer uma contribuição para ajudar na manutenção de novos repositórios e nos meus estudos em Engenharia de Software.**
+
+Chave PIX: **b74ef2a3-5397-4658-9525-172ec661e73c**
+
+<img width="359" height="351" alt="image" src="https://github.com/user-attachments/assets/e8642643-027b-4652-91ab-0d04f99f6212" />
+
+
+
+## 🛠️ Vamos trabalhar juntos?
+**Precisa de ajuda com Automações, APIs ou RPA? Estou disponível para projetos e consultorias.**
+
+    LinkedIn: [https://www.linkedin.com/in/danielboechatsantos/]
+
+    E-mail: [daniel.boechat@edglobo.com.br]
 
 ---
 **Desenvolvido por Daniel Boechat**
