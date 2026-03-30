@@ -25,6 +25,13 @@ Uma ferramenta gráfica moderna desenvolvida em Python para centralizar e automa
 ## 📸 Preview
 <img width="825" height="952" alt="preview" src="https://github.com/user-attachments/assets/61ad2bb7-71a5-43bf-9cae-b02a8175c735" />
 
+## Nova Função - Desativar Serviços Extras
+
+**Abre uma sugestão de serviços extras do Windows que podem ser desativados, onde o usuário poderá escolher. Nos serviços, é explicado o que faz e o ganho de desempenho esperado.**
+
+<img width="501" height="635" alt="image" src="https://github.com/user-attachments/assets/8d6a68d3-62e4-48c7-8818-747279733575" />
+
+
 ## 🖥️ Pré-requisitos
 
 Antes de rodar o projeto, você precisará:
