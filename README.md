@@ -76,7 +76,7 @@ Este software executa comandos de manutenção de baixo nível no Windows. Use c
 ## ☕ Apoie o Projeto
 **Se este projeto te ajudou de alguma forma, considere fazer uma contribuição para ajudar na manutenção de novos repositórios e nos meus estudos em Engenharia de Software.**
 
-Chave PIX: **b74ef2a3-5397-4658-9525-172ec661e73c**
+**Chave PIX:** `b74ef2a3-5397-4658-9525-172ec661e73c`
 
 <img width="359" height="351" alt="image" src="https://github.com/user-attachments/assets/e8642643-027b-4652-91ab-0d04f99f6212" />
 
@@ -85,9 +85,8 @@ Chave PIX: **b74ef2a3-5397-4658-9525-172ec661e73c**
 ## 🛠️ Vamos trabalhar juntos?
 **Precisa de ajuda com Automações, APIs ou RPA? Estou disponível para projetos e consultorias.**
 
-    LinkedIn: [https://www.linkedin.com/in/danielboechatsantos/]
-
-    E-mail: [daniel.boechat@edglobo.com.br]
+   - 🟦 [LinkedIn](https://www.linkedin.com/in/danielboechatsantos/)
+   - 📧 [E-mail](mailto:daniel.boechat@edglobo.com.br)
 
 ---
 **Desenvolvido por Daniel Boechat**
