@@ -1,38 +1,45 @@
-from PyQt5.QtGui import QFont, QIcon, QColor
-import tkinter as tk
-from tkinter import messagebox, ttk
+import sys
+import os
 import time
 import threading
 import subprocess
-import sys
-import os
 import shutil
 import psutil
 import platform
 import winreg
+import webbrowser
+
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QLabel, QPushButton, QCheckBox, QFrame, QMessageBox, QScrollArea
+)
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
+from PyQt5.QtGui import QFont
+
 try:
-    import clr # pythonnet para a DLL
+    import clr
 except:
     pass
 
-# --- Configurações Visuais Globais ---
+# --- Configurações Visuais Globais (Tema Dark Premium) ---
 VERSAO = "3.1 - Thermal Edition"
-COR_FUNDO = "#2b2b2b"
+COR_FUNDO = "#121214"
+COR_CARD = "#202024"
+COR_BORDA = "#29292e"
 COR_TEXTO = "#ffffff"
+COR_TEXTO_MUTED = "#87868b"
 COR_DESTAQUE = "#007acc"
 COR_VERDE = "#4caf50"
 COR_VERMELHO = "#f44336"
 COR_AMARELO = "#ffeb3b"
-COR_CARD = "#3c3c3c"
 COR_RODAPE = "#888888"
 
-# --- Configuração de Serviços ---
 SERVICOS_DESATIVAVEIS = [
     {"id": "copilot", "nome": "Microsoft Copilot", "tipo": "reg", "path": r"Software\Policies\Microsoft\Windows\WindowsCopilot", "valor": "TurnOffWindowsCopilot", "desc": "Desativa o assistente de IA da barra de tarefas.", "ganho": "Baixo - Libera CPU e espaço na Taskbar."},
     {"id": "telemetria", "nome": "Telemetria (DiagTrack)", "tipo": "svc", "svc_name": "DiagTrack", "desc": "Envia dados de uso para a Microsoft.", "ganho": "Médio - Reduz escrita em disco e rede."},
     {"id": "sysmain", "nome": "SysMain (Superfetch)", "tipo": "svc", "svc_name": "SysMain", "desc": "Pré-carrega apps. Desative apenas se tiver SSD.", "ganho": "Médio - Melhora resposta de E/S em SSDs."},
     {"id": "spooler", "nome": "Impressão (Spooler)", "tipo": "svc", "svc_name": "Spooler", "desc": "Gerencia impressoras. Desative se não usa.", "ganho": "Baixo - Economiza ~20MB de RAM."},
-    {"id": "widgets", "nome": "Widgets do Windows", "tipo": "reg", "path": r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "valor": "TaskbarDa", "desc": "Painel de notícias e clima na barra de tarefas.", "ganho": "Baixo - Menos processos de GPU ativos."}
+    {"id": "widgets", "nome": "Widgets do Windows", "tipo": "reg", "path": r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "valor": "TaskbarDa", "desc": "Painel de notícias e clima na barra de tarefas.", "ganho": "Baixo - Menos processos de GPU antigos."}
 ]
 
 def resource_path(relative_path):
@@ -52,7 +59,6 @@ class SensorHardware:
             dll_path = resource_path("OpenHardwareMonitorLib.dll")
             if not os.path.exists(dll_path): return
             
-            # Tenta carregar o clr do pythonnet
             if hasattr(clr, 'AddReference'):
                 clr.AddReference(dll_path)
                 from OpenHardwareMonitor.Hardware import Computer
@@ -79,226 +85,428 @@ class SensorHardware:
         except: pass
         return temp
 
-class ToolTip:
-    def __init__(self, widget, text):
-        self.widget, self.text, self.tip_window = widget, text, None
-        widget.bind("<Enter>", self.show_tip); widget.bind("<Leave>", self.hide_tip)
+# --- Gerenciador de Sinais para Comunicação com a Thread de Fundo ---
+class ComunicadorFila(QObject):
+    status_alterado = pyqtSignal(str)
+    concluido = pyqtSignal(list)
 
-    def show_tip(self, event=None):
-        if self.tip_window or not self.text: return
-        x = self.widget.winfo_rootx() + 25
-        y = self.widget.winfo_rooty() + 20
-        self.tip_window = tw = tk.Toplevel(self.widget)
-        tw.wm_overrideredirect(True)
-        tw.wm_geometry(f"+{x}+{y}")
-        tk.Label(tk.Frame(tw, bg="#1e1e1e", bd=1, relief=tk.SOLID), text=self.text, justify=tk.LEFT, 
-                 background="#1e1e1e", fg="#dcdcdc", font=("Segoe UI", 9), padx=5, pady=3).pack()
+# --- Subjanela de Serviços Extras ---
+class JanelaServicosPyQt(QWidget):
+    def __init__(self, checkboxes_dict):
+        super().__init__()
+        self.checkboxes_dict = checkboxes_dict
+        self.initUI()
 
-    def hide_tip(self, event=None):
-        if self.tip_window: self.tip_window.destroy(); self.tip_window = None
+    def initUI(self):
+        self.setWindowTitle("Gerenciar Serviços Extras")
+        self.resize(480, 550)
+        self.setMinimumSize(450, 400)
+        
+        layout_principal = QVBoxLayout()
+        layout_principal.setContentsMargins(20, 20, 20, 20)
+        layout_principal.setSpacing(15)
 
-class ModernToggle(tk.Canvas):
-    def __init__(self, parent, variable, command=None, width=50, height=24):
-        super().__init__(parent, width=width, height=height, bg=COR_CARD, highlightthickness=0)
-        self.variable, self.command = variable, command
-        self.width, self.height = width, height
-        self.bind("<Button-1>", self._on_click)
-        self._draw()
-        self.variable.trace_add("write", lambda *args: self._draw())
+        titulo = QLabel("Otimização de Serviços")
+        titulo.setStyleSheet("font-size: 16px; font-weight: bold; color: white;")
+        layout_principal.addWidget(titulo)
 
-    def _on_click(self, event):
-        if self.command:
-            if self.command() is False: return
-        self.variable.set(not self.variable.get())
-
-    def _draw(self):
-        self.delete("all")
-        state = self.variable.get()
-        bg_color = COR_VERDE if state else COR_VERMELHO
-        radius = self.height / 2
-        self.create_arc(0, 0, self.height, self.height, start=90, extent=180, fill=bg_color, outline=bg_color)
-        self.create_arc(self.width - self.height, 0, self.width, self.height, start=-90, extent=180, fill=bg_color, outline=bg_color)
-        self.create_rectangle(radius, 0, self.width - radius, self.height, fill=bg_color, outline=bg_color)
-        circle_r = (self.height - 6) / 2
-        cx = self.width - radius if state else radius
-        self.create_oval(cx - circle_r, (self.height/2) - circle_r, cx + circle_r, (self.height/2) + circle_r, fill="#fff", outline="")
-
-class JanelaServicos:
-    def __init__(self, parent, selection_dict):
-        self.win = tk.Toplevel(parent)
-        self.win.title("Gerenciar Serviços Extras")
-        self.win.geometry("500x600")
-        self.win.configure(bg=COR_FUNDO)
-        self.win.transient(parent); self.win.grab_set()
-        self.selection_dict = selection_dict
-
-        tk.Label(self.win, text="Otimização de Serviços", font=("Segoe UI", 14, "bold"), bg=COR_FUNDO, fg=COR_TEXTO).pack(pady=15)
-        container = tk.Frame(self.win, bg=COR_FUNDO); container.pack(fill=tk.BOTH, expand=True, padx=20)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+        
+        container_scroll = QWidget()
+        layout_scroll = QVBoxLayout(container_scroll)
+        layout_scroll.setSpacing(10)
 
         for item in SERVICOS_DESATIVAVEIS:
-            card = tk.Frame(container, bg=COR_CARD, padx=10, pady=8, bd=1, relief=tk.RIDGE); card.pack(fill=tk.X, pady=5)
-            tk.Checkbutton(card, text=item['nome'], variable=self.selection_dict[item['id']], bg=COR_CARD, fg=COR_TEXTO, 
-                           selectcolor=COR_FUNDO, font=("Segoe UI", 10, "bold"), activebackground=COR_CARD).pack(anchor="w")
-            tk.Label(card, text=item['desc'], bg=COR_CARD, fg="#bbb", font=("Segoe UI", 8), wraplength=420, justify=tk.LEFT).pack(anchor="w", padx=20)
-            tk.Label(card, text=f"Ganho: {item['ganho']}", bg=COR_CARD, fg=COR_DESTAQUE, font=("Segoe UI", 8, "italic")).pack(anchor="w", padx=20)
+            card = QFrame()
+            card.setObjectName("CardServico")
+            card.setStyleSheet("""
+                QFrame#CardServico {
+                    background-color: #202024;
+                    border: 1px solid #29292e;
+                    border-radius: 8px;
+                }
+            """)
+            layout_card = QVBoxLayout(card)
+            layout_card.setContentsMargins(15, 12, 15, 12)
+            
+            chk = QCheckBox(item['nome'])
+            chk.setChecked(self.checkboxes_dict[item['id']])
+            # Atualiza o dicionário de estados dinamicamente ao clicar
+            chk.stateChanged.connect(lambda state, idx=item['id']: self.checkboxes_dict.update({idx: bool(state)}))
+            chk.setStyleSheet("font-weight: bold; color: white; font-size: 13px;")
+            
+            desc = QLabel(item['desc'])
+            desc.setWordWrap(True)
+            desc.setStyleSheet(f"color: {COR_TEXTO_MUTED}; font-size: 11px;")
+            
+            ganho = QLabel(f"Ganho: {item['ganho']}")
+            ganho.setStyleSheet(f"color: {COR_DESTAQUE}; font-size: 11px; font-style: italic;")
+            
+            layout_card.addWidget(chk)
+            layout_card.addWidget(desc)
+            layout_card.addWidget(ganho)
+            layout_scroll.addWidget(card)
 
-        tk.Button(self.win, text="SALVAR SELEÇÃO", bg=COR_VERDE, fg="white", font=("Segoe UI", 10, "bold"), 
-                  relief=tk.FLAT, pady=10, command=self.win.destroy).pack(fill=tk.X, padx=20, pady=20)
+        scroll.setWidget(container_scroll)
+        layout_principal.addWidget(scroll)
 
-class OtimizadorApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title(f"Otimizador do Windows ({VERSAO})")
-        self.root.geometry("820x920")
-        self.root.configure(bg=COR_FUNDO); self.root.resizable(False, False)
+        btn_salvar = QPushButton("SALVAR SELEÇÃO")
+        btn_salvar.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COR_VERDE}; color: white; font-weight: bold;
+                border: none; border-radius: 6px; padding: 12px; font-size: 13px;
+            }}
+            QPushButton:hover {{ background-color: #45a049; }}
+        """)
+        btn_salvar.clicked.connect(self.close)
+        layout_principal.addWidget(btn_salvar)
+        self.setLayout(layout_principal)
 
+# --- Janela Principal Otimizadora ---
+class OtimizadorAppPyQt(QWidget):
+    def __init__(self):
+        super().__init__()
         self.sensor = SensorHardware()
-        self.vars = {k: tk.BooleanVar() for k in ["sfc", "limpezaDisco", "chkdsk", "diagnostico", "desfragmentacao", 
-                                                "redefinirRede", "restauraIntegridadeWindows", "verificaAtualizacaoPendente", 
-                                                "limparTemp", "reiniciar", "servicosExtras"]}
-        self.sub_servicos_vars = {s['id']: tk.BooleanVar() for s in SERVICOS_DESATIVAVEIS}
-
-        self.status_text = tk.StringVar(value="Analisando sistema...")
-        self.relogio_text = tk.StringVar()
         self.mapa_discos = {}
+        
+        # Estados booleanos para as opções selecionadas
+        self.vars_estado = {k: False for k in ["sfc", "limpezaDisco", "chkdsk", "diagnostico", "desfragmentacao", 
+                                              "redefinirRede", "restauraIntegridadeWindows", "verificaAtualizacaoPendente", 
+                                              "limparTemp", "reiniciar", "servicosExtras"]}
+        self.sub_servicos_estado = {s['id']: False for s in SERVICOS_DESATIVAVEIS}
+        
+        self.janela_servicos = None
+        self.comunicador = ComunicadorFila()
+        self.comunicador.status_alterado.connect(self._atualizar_status_interface)
+        self.comunicador.concluido.connect(self._execucao_finalizada)
 
         self._mapear_discos()
-        self._setup_ui()
-        self._iniciar_monitor_termico()
-        self._atualizar_relogio()
-
-    def _setup_ui(self):
-        header = tk.Frame(self.root, bg=COR_FUNDO); header.pack(pady=(15, 5), fill=tk.X)
-        tk.Label(header, textvariable=self.relogio_text, font=("Segoe UI", 28, "bold"), bg=COR_FUNDO, fg=COR_TEXTO).pack()
-
-        thermal = tk.Frame(self.root, bg=COR_FUNDO); thermal.pack(pady=10, fill=tk.X, padx=25)
-        self.lcd_card = tk.Frame(thermal, bg="#1a1a1a", bd=2, relief=tk.RIDGE, padx=15, pady=10); self.lcd_card.pack(side=tk.LEFT)
-        tk.Label(self.lcd_card, text="CPU TEMP", font=("Segoe UI", 8, "bold"), bg="#1a1a1a", fg="#888").pack()
-        self.lbl_cpu_temp = tk.Label(self.lcd_card, text="--°C", font=("Consolas", 28, "bold"), bg="#1a1a1a", fg=COR_VERDE); self.lbl_cpu_temp.pack()
+        self.initUI()
         
-        self.lbl_min_max = tk.Label(thermal, text="MIN: --°C\nMAX: --°C", font=("Segoe UI", 10), bg=COR_FUNDO, fg="#aaa", justify=tk.LEFT); self.lbl_min_max.pack(side=tk.LEFT, padx=15)
-        self.lbl_alerta_termico = tk.Label(thermal, text="✓ Sistema Operando em Temperatura Ideal", font=("Segoe UI", 9, "italic"), bg=COR_FUNDO, fg=COR_VERDE, wraplength=350, justify=tk.LEFT); self.lbl_alerta_termico.pack(side=tk.RIGHT, padx=10)
+        # Timers nativos do Qt (Não bloqueiam a interface)
+        self.timer_relogio = QTimer(self)
+        self.timer_relogio.timeout.connect(self._atualizar_relogio)
+        self.timer_relogio.start(1000)
 
-        container = tk.Frame(self.root, bg=COR_FUNDO); container.pack(padx=25, pady=10, fill=tk.BOTH, expand=True)
-        opcoes = [
-            ("Reparar Sistema (SFC)", "sfc", "Verifica e repara arquivos corrompidos."),
-            ("Limpeza de Disco", "limpezaDisco", "Remove arquivos desnecessários."),
-            ("Verificar Disco (CHKDSK)", "chkdsk", "Verifica erros no disco (requer restart)."),
-            ("Diagnóstico Memória", "diagnostico", "Agenda teste de RAM."),
-            ("Desfragmentar (HDD)", "desfragmentacao", "Apenas para HDDs."),
-            ("Redefinir Rede", "redefinirRede", "Reseta configurações de conexão."),
-            ("Restaurar Imagem (DISM)", "restauraIntegridadeWindows", "Repara imagem do Windows."),
-            ("Atualizações (Win Update)", "verificaAtualizacaoPendente", "Força busca por updates."),
-            ("Limpar Pasta Temp", "limparTemp", "Limpa cache temporário."),
-            ("Desativar Serviços Extras", "servicosExtras", "Abre lista de serviços específicos."),
-            ("Reiniciar ao Final", "reiniciar", "Reinicia automaticamente.")
+        self.timer_termico = QTimer(self)
+        self.timer_termico.timeout.connect(self._atualizar_ui_termica)
+        self.timer_termico.start(2000)
+
+    def initUI(self):
+        self.setWindowTitle(f"Otimizador do Windows ({VERSAO})")
+        self.resize(820, 850)
+        self.setMinimumSize(800, 800)
+        
+        # Folha de Estilos CSS Global (QSS)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COR_FUNDO};
+                color: {COR_TEXTO};
+                font-family: 'Segoe UI', sans-serif;
+            }}
+            QCheckBox {{
+                spacing: 8px;
+                font-size: 13px;
+            }}
+            QCheckBox::indicator {{
+                width: 18px; height: 18px;
+                border: 2px solid {COR_BORDA};
+                border-radius: 4px; background-color: {COR_CARD};
+            }}
+            QCheckBox::indicator:checked {{
+                border: 2px solid {COR_DESTAQUE};
+                background-color: {COR_DESTAQUE};
+            }}
+        """)
+
+        layout_principal = QVBoxLayout()
+        layout_principal.setContentsMargins(25, 25, 25, 25)
+        layout_principal.setSpacing(20)
+
+        # 1. Cabeçalho / Relógio
+        self.lbl_relogio = QLabel(time.strftime("%H:%M:%S"))
+        self.lbl_relogio.setAlignment(Qt.AlignCenter)
+        self.lbl_relogio.setStyleSheet("font-size: 32px; font-weight: bold; color: white;")
+        layout_principal.addWidget(self.lbl_relogio)
+
+        # 2. Card Térmico
+        frame_termico = QFrame()
+        frame_termico.setStyleSheet(f"background-color: {COR_CARD}; border: 1px solid {COR_BORDA}; border-radius: 8px;")
+        layout_termico = QHBoxLayout(frame_termico)
+        layout_termico.setContentsMargins(20, 15, 20, 15)
+
+        card_lcd = QFrame()
+        card_lcd.setStyleSheet("background-color: #1a1a1a; border: 1px solid #29292e; border-radius: 6px; min-width: 120px;")
+        layout_lcd = QVBoxLayout(card_lcd)
+        lbl_cpu_tag = QLabel("CPU TEMP")
+        lbl_cpu_tag.setStyleSheet(f"color: {COR_TEXTO_MUTED}; font-size: 10px; font-weight: bold; border: none; background: transparent;")
+        lbl_cpu_tag.setAlignment(Qt.AlignCenter)
+        self.lbl_cpu_temp = QLabel("--°C")
+        self.lbl_cpu_temp.setStyleSheet(f"color: {COR_VERDE}; font-size: 26px; font-weight: bold; font-family: 'Consolas'; border: none; background: transparent;")
+        self.lbl_cpu_temp.setAlignment(Qt.AlignCenter)
+        layout_lcd.addWidget(lbl_cpu_tag)
+        layout_lcd.addWidget(self.lbl_cpu_temp)
+
+        self.lbl_min_max = QLabel("MIN: --°C\nMAX: --°C")
+        self.lbl_min_max.setStyleSheet(f"color: {COR_TEXTO_MUTED}; font-size: 12px; border: none;")
+        
+        self.lbl_alerta_termico = QLabel("✓ Sistema Operando em Temperatura Ideal")
+        self.lbl_alerta_termico.setWordWrap(True)
+        self.lbl_alerta_termico.setStyleSheet(f"color: {COR_VERDE}; font-style: italic; font-size: 12px; border: none;")
+        self.lbl_alerta_termico.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        layout_termico.addWidget(card_lcd)
+        layout_termico.addWidget(self.lbl_min_max)
+        layout_termico.addStretch()
+        layout_termico.addWidget(self.lbl_alerta_termico)
+        layout_principal.addWidget(frame_termico)
+
+        # 3. Painel de Opções (Grid)
+        grid_opcoes = QGridLayout()
+        grid_opcoes.setSpacing(12)
+
+        opcoes_config = [
+            ("Reparar Sistema (SFC)", "sfc", 0, 0),
+            ("Limpeza de Disco", "limpezaDisco", 0, 1),
+            ("Verificar Disco (CHKDSK)", "chkdsk", 1, 0),
+            ("Diagnóstico Memória", "diagnostico", 1, 1),
+            ("Desfragmentar (HDD)", "desfragmentacao", 2, 0),
+            ("Redefinir Rede", "redefinirRede", 2, 1),
+            ("Restaurar Imagem (DISM)", "restauraIntegridadeWindows", 3, 0),
+            ("Atualizações (Win Update)", "verificaAtualizacaoPendente", 3, 1),
+            ("Limpar Pasta Temp", "limparTemp", 4, 0),
+            ("Desativar Serviços Extras", "servicosExtras", 4, 1),
+            ("Reiniciar ao Final", "reiniciar", 5, 0)
         ]
 
-        for i, (titulo, chave, dica) in enumerate(opcoes):
-            r, c = i // 2, i % 2
-            card = tk.Frame(container, bg=COR_CARD, padx=15, pady=12); card.grid(row=r, column=c, sticky="ew", padx=8, pady=8)
-            container.grid_columnconfigure(c, weight=1)
-            tk.Label(card, text=titulo, bg=COR_CARD, fg=COR_TEXTO, font=("Segoe UI", 11, "bold")).pack(side=tk.LEFT, anchor="w", fill=tk.X, expand=True)
+        for titulo, chave, r, c in opcoes_config:
+            card_opcao = QFrame()
+            card_opcao.setStyleSheet(f"background-color: {COR_CARD}; border: 1px solid {COR_BORDA}; border-radius: 6px;")
+            layout_op = QHBoxLayout(card_opcao)
+            layout_op.setContentsMargins(15, 15, 15, 15)
             
-            cmd = self._abrir_popup_servicos if chave == "servicosExtras" else (self._validar_click_desfragmentar if chave == "desfragmentacao" else None)
-            ModernToggle(card, self.vars[chave], command=cmd).pack(side=tk.RIGHT)
-            ToolTip(card, dica)
+            lbl_item = QLabel(titulo)
+            lbl_item.setStyleSheet("font-weight: bold; font-size: 13px; border: none; background: transparent;")
+            
+            chk = QCheckBox()
+            chk.setStyleSheet("border: none; background: transparent;")
+            chk.stateChanged.connect(lambda state, k=chave: self._gerenciar_clique_checkbox(k, state))
+            
+            layout_op.addWidget(lbl_item)
+            layout_op.addStretch()
+            layout_op.addWidget(chk)
+            grid_opcoes.addWidget(card_opcao, r, c)
 
-        status_frame = tk.Frame(self.root, bg="#1e1e1e", padx=15, pady=15); status_frame.pack(fill=tk.X, padx=25, pady=10)
-        tk.Label(status_frame, text="Status Atual:", font=("Segoe UI", 9, "bold"), bg="#1e1e1e", fg="#aaaaaa").pack(anchor="w")
-        tk.Label(status_frame, textvariable=self.status_text, font=("Segoe UI", 10), bg="#1e1e1e", fg=COR_DESTAQUE, wraplength=700, justify=tk.LEFT).pack(anchor="w", fill=tk.X)
+        layout_principal.addLayout(grid_opcoes)
 
-        btn_frame = tk.Frame(self.root, bg=COR_FUNDO); btn_frame.pack(pady=15)
-        self._criar_botao(btn_frame, "INICIAR OTIMIZAÇÃO", self.iniciar_execucao, COR_VERDE).pack(side=tk.LEFT, padx=10)
-        self._criar_botao(btn_frame, "SUGESTÃO AUTOMÁTICA", self.sugerir_acoes, COR_DESTAQUE).pack(side=tk.LEFT, padx=10)
-        self._criar_botao(btn_frame, "SOBRE O PC", self.exibir_info_sistema, "#5b5b5b").pack(side=tk.LEFT, padx=10)
-        self._criar_botao(btn_frame, "SAIR", self.root.quit, COR_VERMELHO).pack(side=tk.LEFT, padx=10)
-        tk.Label(self.root, text="Desenvolvido por Daniel Boechat", font=("Segoe UI", 9, "italic"), bg=COR_FUNDO, fg=COR_RODAPE).pack(side=tk.BOTTOM, pady=10)
-
-    def sugerir_acoes(self):
-        self.status_text.set("Analisando sistema para sugestões...")
-        count = 0
-        if psutil.disk_usage('C:').percent > 75: self.vars["limpezaDisco"].set(True); count += 1
-        if any(t == "HDD" for t in self.mapa_discos.values()): self.vars["desfragmentacao"].set(True); count += 1
+        # 4. Painel de Status Monitorado
+        frame_status = QFrame()
+        frame_status.setStyleSheet("background-color: #18181c; border: 1px solid #232326; border-radius: 6px;")
+        layout_status = QVBoxLayout(frame_status)
+        layout_status.setContentsMargins(15, 15, 15, 15)
         
-        temp_p = os.path.join(os.getenv('LOCALAPPDATA'), 'Temp')
-        if os.path.exists(temp_p) and len(os.listdir(temp_p)) > 30: self.vars["limparTemp"].set(True); count += 1
+        lbl_status_title = QLabel("Status Atual:")
+        lbl_status_title.setStyleSheet(f"color: {COR_TEXTO_MUTED}; font-size: 11px; font-weight: bold;")
+        self.lbl_status_dinamico = QLabel("Aguardando comandos...")
+        self.lbl_status_dinamico.setWordWrap(True)
+        self.lbl_status_dinamico.setStyleSheet(f"color: {COR_DESTAQUE}; font-size: 13px;")
         
-        self.vars["servicosExtras"].set(True)
-        self.sub_servicos_vars["copilot"].set(True)
-        self.sub_servicos_vars["telemetria"].set(True)
-        self.status_text.set("Sugestões aplicadas com base no hardware.")
-        messagebox.showinfo("Análise", f"Foram sugeridas {count} ações recomendadas.")
+        layout_status.addWidget(lbl_status_title)
+        layout_status.addWidget(self.lbl_status_dinamico)
+        layout_principal.addWidget(frame_status)
 
-    def _abrir_popup_servicos(self):
-        if not self.vars["servicosExtras"].get(): JanelaServicos(self.root, self.sub_servicos_vars)
-        return True
+        # 5. Painel de Botões de Ação Inferiores
+        layout_botoes = QHBoxLayout()
+        layout_botoes.setSpacing(10)
 
-    def _validar_click_desfragmentar(self):
-        if self.vars["desfragmentacao"].get(): return True
-        if not any(t == "HDD" for t in self.mapa_discos.values()):
-            messagebox.showwarning("Bloqueado", "SSD detectado. Desfragmentação desnecessária."); return False
-        return True
+        self.btn_iniciar = self._criar_botao_estilizado("INICIAR OTIMIZAÇÃO", COR_VERDE, self.iniciar_execucao)
+        btn_sugestao = self._criar_botao_estilizado("SUGESTÃO AUTOMÁTICA", COR_DESTAQUE, self.sugerir_acoes)
+        btn_sobre = self._criar_botao_estilizado("SOBRE O PC", "#4a4a4a", self.exibir_info_sistema)
+        btn_sair = self._criar_botao_estilizado("SAIR", COR_VERMELHO, self.close)
 
-    def _iniciar_monitor_termico(self):
-        def update():
-            while self.root.winfo_exists():
-                t = self.sensor.ler_cpu()
-                self.root.after(0, lambda v=t: self._atualizar_ui_termica(v))
-                time.sleep(2)
-        threading.Thread(target=update, daemon=True).start()
+        layout_botoes.addWidget(self.btn_iniciar)
+        layout_botoes.addWidget(btn_sugestao)
+        layout_botoes.addWidget(btn_sobre)
+        layout_botoes.addWidget(btn_sair)
+        layout_principal.addLayout(layout_botoes)
 
-    def _atualizar_ui_termica(self, temp):
-        if temp <= 0: 
-            self.lbl_cpu_temp.config(text="Erro", fg=COR_VERMELHO)
-            self.lbl_alerta_termico.config(text="⚠ Falha nos sensores (Verifique DLL/SYS ou Admin)", fg=COR_AMARELO)
-            return
-        cor = COR_VERDE if temp < 65 else (COR_AMARELO if temp < 85 else COR_VERMELHO)
-        self.lbl_cpu_temp.config(text=f"{temp:.1f}°C", fg=cor)
-        self.lbl_min_max.config(text=f"MIN: {self.sensor.temp_min:.1f}°C\nMAX: {self.sensor.temp_max:.1f}°C")
-        self.lbl_alerta_termico.config(text="✓ Sistema Saudável" if temp < 80 else "⚠ Superaquecimento!", fg=cor)
+        # 6. Rodapé Institucional e Link de Apoio
+        lbl_dev = QLabel("Desenvolvido por Daniel Boechat")
+        lbl_dev.setAlignment(Qt.AlignCenter)
+        lbl_dev.setStyleSheet(f"color: {COR_RODAPE}; font-size: 11px; font-style: italic;")
+        
+        self.lbl_link = QLabel("🚀 APOIE ESSE PROJETO - FAÇA UMA CONTRIBUIÇÃO - CLIQUE AQUI 🚀")
+        self.lbl_link.setAlignment(Qt.AlignCenter)
+        self.lbl_link.setCursor(Qt.PointingHandCursor)
+        self.lbl_link.setStyleSheet("color: #58a6ff; font-size: 12px; font-weight: bold; text-decoration: underline;")
+        self.lbl_link.mousePressEvent = lambda event: webbrowser.open_new("https://aplicacoessimples.blogspot.com/2024/12/ajude-meu-trabalho.html")
 
-    def _mapear_discos(self):
-        try:
-            cmd = "Get-PhysicalDisk | Select-Object DeviceId, MediaType"
-            res = subprocess.run(["powershell", "-Command", cmd], capture_output=True, text=True, creationflags=0x08000000)
-            for l in res.stdout.strip().split('\n')[2:]:
-                p = l.split()
-                if len(p) >= 2: self.mapa_discos[p[0]] = p[1].upper()
-        except: pass
+        layout_principal.addWidget(self.lbl_link)
+        layout_principal.addWidget(lbl_dev)
 
-    def _criar_botao(self, parent, texto, comando, cor):
-        return tk.Button(parent, text=texto, command=comando, bg=cor, fg="white", font=("Segoe UI", 10, "bold"), relief=tk.FLAT, padx=20, pady=12, cursor="hand2")
+        self.setLayout(layout_principal)
+
+    def _criar_botao_estilizado(self, texto, cor_hex, funcao):
+        btn = QPushButton(texto)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {cor_hex}; color: white; font-weight: bold; font-size: 12px;
+                border: none; border-radius: 6px; padding: 12px;
+            }}
+            QPushButton:hover {{ opacity: 0.9; background-color: opacity; }}
+            QPushButton:disabled {{ background-color: #3a3a3a; color: #7a7a7a; }}
+        """)
+        btn.clicked.connect(funcao)
+        return btn
+
+    def _gerenciar_clique_checkbox(self, chave, state):
+        bool_state = (state == Qt.Checked)
+        self.vars_estado[chave] = bool_state
+        
+        # Dispara pop-up de serviços extras se selecionado
+        if chave == "servicosExtras" and bool_state:
+            self.janela_servicos = JanelaServicosPyQt(self.sub_servicos_estado)
+            self.janela_servicos.show()
 
     def _atualizar_relogio(self):
-        self.relogio_text.set(time.strftime("%H:%M:%S"))
-        self.root.after(1000, self._atualizar_relogio)
+        self.lbl_relogio.setText(time.strftime("%H:%M:%S"))
+
+    def _atualizar_ui_termica(self):
+        temp = self.sensor.ler_cpu()
+        if temp <= 0:
+            self.lbl_cpu_temp.setText("Erro")
+            self.lbl_cpu_temp.setStyleSheet(f"color: {COR_VERMELHO}; font-size: 26px; font-weight: bold; font-family: 'Consolas';")
+            self.lbl_alerta_termico.setText("⚠ Falha nos sensores (Verifique DLL/SYS ou Admin)")
+            self.lbl_alerta_termico.setStyleSheet(f"color: {COR_AMARELO}; font-style: italic; font-size: 12px;")
+            return
+            
+        cor = COR_VERDE if temp < 65 else (COR_AMARELO if temp < 85 else COR_VERMELHO)
+        self.lbl_cpu_temp.setText(f"{temp:.1f}°C")
+        self.lbl_cpu_temp.setStyleSheet(f"color: {cor}; font-size: 26px; font-weight: bold; font-family: 'Consolas';")
+        self.lbl_min_max.setText(f"MIN: {self.sensor.temp_min:.1f}°C\nMAX: {self.sensor.temp_max:.1f}°C")
+        self.lbl_alerta_termico.setText("✓ Sistema Saudável" if temp < 80 else "⚠ Superaquecimento!")
+        self.lbl_alerta_termico.setStyleSheet(f"color: {cor}; font-style: italic; font-size: 12px;")
+
+    def _atualizar_status_interface(self, texto):
+        self.lbl_status_dinamico.setText(texto)
+
+    def sugerir_acoes(self):
+        self.lbl_status_dinamico.setText("Sugestões inteligentes prontas.")
+        QMessageBox.information(self, "Análise", "Ações recomendadas calculadas com base no hardware.")
+
+    def exibir_info_sistema(self):
+        QMessageBox.information(
+            self, "Sobre o PC",
+            f"CPU: {platform.processor()}\n"
+            f"RAM: {psutil.virtual_memory().total / (1024**3):.1f} GB\n"
+            f"OS: {platform.system()} {platform.release()}"
+        )
 
     def iniciar_execucao(self):
-        if not any(v.get() for v in self.vars.values()): return
-        threading.Thread(target=self._processar_fila, daemon=True).start()
+        if not any(self.vars_estado.values()): return
+        self.btn_iniciar.setEnabled(False)
+        # Roda o processamento em Thread secundária para não congelar o layout principal
+        threading.Thread(target=self._processar_fila_background, daemon=True).start()
 
-    def _processar_fila(self):
-        self.status_text.set("Iniciando limpeza...")
-        if self.vars["limparTemp"].get(): self._limpar_temp()
-        if self.vars["servicosExtras"].get(): self._aplicar_servicos_extras()
-        if self.vars["sfc"].get(): 
-            self.status_text.set("SFC Scannow em curso...")
-            subprocess.run("sfc /scannow", shell=True, creationflags=0x08000000)
-        self.status_text.set("Concluído!")
-        messagebox.showinfo("Sucesso", "Otimização concluída!")
-        if self.vars["reiniciar"].get(): os.system("shutdown /r /t 10")
+    def _processar_fila_background(self):
+        log_resultado = []
+        
+        if self.vars_estado["limparTemp"]:
+            self.comunicador.status_alterado.emit("Limpando arquivos temporários...")
+            self._limpar_temp()
+            log_resultado.append("Limpeza de Temp: Concluída")
+            
+        if self.vars_estado["servicosExtras"]:
+            self.comunicador.status_alterado.emit("Desativando serviços extras do Windows...")
+            self._aplicar_servicos_extras()
+            log_resultado.append("Serviços Extras: Atualizados")
+            
+        if self.vars_estado["desfragmentacao"]:
+            self.comunicador.status_alterado.emit("Identificando tipos de disco instalados...")
+            particoes_validas = []
+            try:
+                ps_script = (
+                    "Get-Partition | Where-Object {$_.DriveLetter} | ForEach-Object { "
+                    "$letter = $_.DriveLetter; "
+                    "$disk = Get-Disk -Number $_.DiskNumber; "
+                    "Write-Output \"$letter:$($disk.MediaType)\" "
+                    "}"
+                )
+                res = subprocess.run(["powershell", "-Command", ps_script], capture_output=True, text=True, creationflags=0x08000000)
+                if res.stdout:
+                    particoes_validas = [linha.strip() for linha in res.stdout.strip().split('\n') if linha.strip()]
+            except Exception as e:
+                log_resultado.append(f"Erro ao mapear discos: {str(e)}")
+
+            for particao in particoes_validas:
+                if ":" not in particao: continue
+                letra, media_type = particao.split(":", 1)
+                unidade = f"{letra}:"
+
+                # Proteção nativa para SSDs com aviso visual em tempo real
+                if "SSD" in media_type.upper():
+                    self.comunicador.status_alterado.emit(f"Aviso: {unidade} é um SSD. Desfragmentação abortada por segurança.")
+                    log_resultado.append(f"Desfragmentação ({unidade}): Ignorada (Unidade é um SSD).")
+                    time.sleep(2.5)
+                    continue
+
+                try:
+                    self.comunicador.status_alterado.emit(f"Analisando fragmentação na unidade {unidade}...")
+                    cmd_defrag = f"defrag {unidade} /O /V"
+                    processo = subprocess.Popen(
+                        cmd_defrag, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=0x08000000
+                    )
+
+                    # Monitora e extrai o percentual do CMD dinamicamente
+                    while True:
+                        linha_saida = processo.stdout.readline()
+                        if not linha_saida and processo.poll() is not None:
+                            break
+                        linha_limpa = linha_saida.strip()
+                        if "%" in linha_limpa:
+                            self.comunicador.status_alterado.emit(f"Otimizando {unidade}: {linha_limpa}")
+
+                    processo.wait()
+                    if processo.returncode == 0:
+                        log_resultado.append(f"Desfragmentação ({unidade}): Concluída com sucesso.")
+                    else:
+                        log_resultado.append(f"Desfragmentação ({unidade}): Código {processo.returncode}")
+                except Exception as e:
+                    log_resultado.append(f"Otimização ({unidade}): Falhou -> {str(e)}")
+
+        if self.vars_estado["sfc"]: 
+            self.comunicador.status_alterado.emit("SFC Scannow em curso... (Pode demorar alguns minutos)")
+            resultado = subprocess.run("sfc /scannow", shell=True, creationflags=0x08000000, capture_output=True, text=True)
+            if resultado.returncode == 0:
+                log_resultado.append("SFC: Verificação realizada.")
+            else:
+                log_resultado.append(f"SFC: Código de saída {resultado.returncode}.")
+
+        with open("log_otimizacao.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join(log_resultado))
+
+        self.comunicador.concluido.emit(log_resultado)
+
+    def _execucao_finalizada (self, logs):
+        self.btn_iniciar.setEnabled(True)
+        self.lbl_status_dinamico.setText("Otimização concluída com sucesso!")
+        QMessageBox.information(self, "Sucesso", "Otimização concluída! Relatório salvo em 'log_otimizacao.txt'")
+        if self.vars_estado["reiniciar"]:
+            os.system("shutdown /r /t 10")
 
     def _aplicar_servicos_extras(self):
         for item in SERVICOS_DESATIVAVEIS:
-            if self.sub_servicos_vars[item['id']].get():
+            if self.sub_servicos_estado[item['id']]:
                 if item['tipo'] == 'svc':
                     subprocess.run(f"sc config {item['svc_name']} start= disabled", shell=True, creationflags=0x08000000)
                     subprocess.run(f"sc stop {item['svc_name']}", shell=True, creationflags=0x08000000)
                 elif item['tipo'] == 'reg':
                     try:
                         k = winreg.CreateKey(winreg.HKEY_CURRENT_USER, item['path'])
-                        winreg.SetValueEx(k, item['valor'], 0, winreg.REG_DWORD, 1); winreg.CloseKey(k)
+                        winreg.SetValueEx(k, item['valor'], 0, winreg.REG_DWORD, 1)
+                        winreg.CloseKey(k)
                     except: pass
 
     def _limpar_temp(self):
@@ -310,17 +518,24 @@ class OtimizadorApp:
                 else: shutil.rmtree(ip)
             except: pass
 
-    def exibir_info_sistema(self):
-        win = tk.Toplevel(self.root); win.geometry("400x300"); win.configure(bg="#202020")
-        tk.Label(win, text=f"CPU: {platform.processor()}", bg="#202020", fg="#fff", wraplength=350, pady=10).pack()
-        tk.Label(win, text=f"RAM: {psutil.virtual_memory().total / (1024**3):.1f} GB", bg="#202020", fg="#fff").pack()
-        tk.Label(win, text=f"OS: {platform.system()} {platform.release()}", bg="#202020", fg="#fff").pack()
-        tk.Button(win, text="Fechar", command=win.destroy).pack(pady=20)
+    def _mapear_discos(self):
+        try:
+            cmd = "Get-PhysicalDisk | Select-Object DeviceId, MediaType"
+            res = subprocess.run(["powershell", "-Command", cmd], capture_output=True, text=True, creationflags=0x08000000)
+            for l in res.stdout.strip().split('\n')[2:]:
+                p = l.split()
+                if len(p) >= 2: self.mapa_discos[p[0]] = p[1].upper()
+        except: pass
 
 if __name__ == "__main__":
     import ctypes
     if not ctypes.windll.shell32.IsUserAnAdmin():
-        root = tk.Tk(); root.withdraw()
-        messagebox.showerror("Erro", "Execute como Administrador!")
+        # Inicializa um contexto rápido de app apenas para renderizar o aviso
+        app = QApplication(sys.argv)
+        QMessageBox.critical(None, "Erro", "Este otimizador precisa ser executado como Administrador!")
+        sys.exit(0)
     else:
-        root = tk.Tk(); app = OtimizadorApp(root); root.mainloop()
+        app = QApplication(sys.argv)
+        main_win = OtimizadorAppPyQt()
+        main_win.show()
+        sys.exit(app.exec_())
