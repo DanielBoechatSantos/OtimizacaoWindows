@@ -112,7 +112,7 @@ Se este software ajudou a manter seu computador rápido e saudável, considere a
 
 * **Chave PIX:** `b74ef2a3-5397-4658-9525-172ec661e73c`
 * **LinkedIn:** [Daniel Boechat](https://www.linkedin.com/in/danielboechatsantos/)
-* **E-mail:** [daniel.dossants@outlook.com.br](mailto:daniel.dossants@outlook.com.br)
+* **E-mail:** [daniel.dossantos@outlook.com.br](mailto:daniel.dossantos@outlook.com.br)
 
 ---
 **Desenvolvido com excelência por Daniel Boechat**
